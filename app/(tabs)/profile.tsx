@@ -1,34 +1,139 @@
-import { StyleSheet } from 'react-native';
+import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import {
+  ACCOUNT_STATUS_LABELS,
+  EVIDENCE_RETENTION,
+  MANUAL_VERIFICATION_SLA,
+  VERIFICATION_STATUS_LABELS,
+} from '@/constants/auth-policy';
+import { getMajorGroupById, getUniversityById } from '@/data/mock-community';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAppSession } from '@/hooks/use-app-session';
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 
 export default function ProfileScreen() {
+  const router = useRouter();
+  const { currentEmail, signOut } = useSupabaseAuth();
+  const {
+    profile,
+    profileStorageMode,
+    profileSyncMessage,
+    verificationMethod,
+    setAccountStatus,
+    resetDemo,
+  } = useAppSession();
+  const [feedback, setFeedback] = useState<string | undefined>();
+  const university = getUniversityById(profile.primaryUniversityId);
+  const majorGroup = getMajorGroupById(profile.primaryMajorGroupId);
+
+  const handleResetLocalProfile = () => {
+    resetDemo();
+  };
+
+  const handleSignOut = async () => {
+    const result = await signOut();
+
+    if (!result.ok) {
+      setFeedback(result.message ?? '로그아웃에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+
+    setFeedback(undefined);
+    router.replace('/');
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#FFE4E1', dark: '#2D1B1B' }}>
-      <ThemedView style={styles.titleContainer}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <ThemedView style={styles.hero}>
         <ThemedText type="title">프로필</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">내 프로필</ThemedText>
         <ThemedText>
-          프로필을 설정하고 친구를 추가하세요.
+          인증 상태, 전공군, 학교 정보와 Phase 1 데모 제어를 먼저 배치한 화면 골격입니다.
         </ThemedText>
       </ThemedView>
-    </ParallaxScrollView>
+
+      <ThemedView style={styles.card}>
+        <ThemedText type="subtitle">내 상태</ThemedText>
+        <ThemedText>닉네임: {profile.nickname}</ThemedText>
+        <ThemedText>인증 상태: {VERIFICATION_STATUS_LABELS[profile.verificationStatus]}</ThemedText>
+        <ThemedText>계정 상태: {ACCOUNT_STATUS_LABELS[profile.accountStatus]}</ThemedText>
+        <ThemedText>로그인 이메일: {currentEmail ?? '미로그인'}</ThemedText>
+        <ThemedText>학교: {university?.name ?? '미선택'}</ThemedText>
+        <ThemedText>전공군: {majorGroup?.label ?? '미선택'}</ThemedText>
+        <ThemedText>인증 방식: {verificationMethod ?? '미설정'}</ThemedText>
+        <ThemedText>
+          프로필 저장 위치: {profileStorageMode === 'supabase' ? 'Supabase profiles' : profileStorageMode === 'local_cache' ? '로컬 캐시' : '인증 기반 초기 상태'}
+        </ThemedText>
+        {profileSyncMessage ? <ThemedText>{profileSyncMessage}</ThemedText> : null}
+        {feedback ? <ThemedText>{feedback}</ThemedText> : null}
+      </ThemedView>
+
+      <ThemedView style={styles.card}>
+        <ThemedText type="subtitle">운영 기준 요약</ThemedText>
+        <ThemedText>{MANUAL_VERIFICATION_SLA.acknowledgement}</ThemedText>
+        <ThemedText>{MANUAL_VERIFICATION_SLA.resolution}</ThemedText>
+        <ThemedText>{EVIDENCE_RETENTION.default}</ThemedText>
+      </ThemedView>
+
+      <ThemedView style={styles.card}>
+        <ThemedText type="subtitle">세션 및 로컬 상태</ThemedText>
+        <Pressable style={styles.secondaryButton} onPress={() => setAccountStatus('active')}>
+          <ThemedText type="defaultSemiBold">정상 상태로 전환</ThemedText>
+        </Pressable>
+        <Pressable style={styles.secondaryButton} onPress={() => setAccountStatus('restricted')}>
+          <ThemedText type="defaultSemiBold">읽기 전용 상태로 전환</ThemedText>
+        </Pressable>
+        <Pressable style={styles.ghostButton} onPress={handleResetLocalProfile}>
+          <ThemedText type="defaultSemiBold">로컬 온보딩 상태 초기화</ThemedText>
+        </Pressable>
+        <Pressable style={styles.primaryButton} onPress={() => void handleSignOut()}>
+          <ThemedText style={styles.primaryButtonText}>로그아웃</ThemedText>
+        </Pressable>
+      </ThemedView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  content: {
+    padding: 20,
+    gap: 16,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  hero: {
+    gap: 10,
+    padding: 20,
+    borderRadius: 20,
+    backgroundColor: 'rgba(194, 106, 61, 0.12)',
+  },
+  card: {
+    gap: 10,
+    padding: 18,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  secondaryButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  ghostButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.12)',
+  },
+  primaryButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: '#1E5FAF',
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });
