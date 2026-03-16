@@ -7,9 +7,12 @@ import { ThemedView } from '@/components/themed-view';
 export default function ModalScreen() {
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">This is a modal</ThemedText>
+      <ThemedText type="title">빠른 안내</ThemedText>
+      <ThemedText style={styles.description}>
+        이 모달은 추후 공지, 필터, 작성 옵션처럼 짧은 보조 흐름을 담는 용도로 사용할 수 있습니다.
+      </ThemedText>
       <Link href="/" dismissTo style={styles.link}>
-        <ThemedText type="link">Go to home screen</ThemedText>
+        <ThemedText type="link">게시판으로 돌아가기</ThemedText>
       </Link>
     </ThemedView>
   );
@@ -18,12 +21,14 @@ export default function ModalScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
+    gap: 12,
+  },
+  description: {
+    opacity: 0.8,
   },
   link: {
-    marginTop: 15,
     paddingVertical: 15,
   },
 });
