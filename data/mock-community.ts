@@ -1,4 +1,4 @@
-import { MAJOR_GROUPS } from '@/constants/major-groups';
+import { SUPPORTED_MAJOR_GROUPS, SUPPORTED_UNIVERSITIES } from '@/lib/community/metadata';
 import type {
   AppSessionScenario,
   Board,
@@ -11,40 +11,9 @@ import type {
   VerificationRecord,
 } from '@/types/domain';
 
-export const MOCK_UNIVERSITIES: University[] = [
-  {
-    id: 'yonsei',
-    slug: 'yonsei',
-    name: '연세대학교',
-    emailDomain: 'yonsei.ac.kr',
-    region: '서울',
-    isActive: true,
-  },
-  {
-    id: 'konyang',
-    slug: 'konyang',
-    name: '건양대학교',
-    emailDomain: 'konyang.ac.kr',
-    region: '대전',
-    isActive: true,
-  },
-  {
-    id: 'daegu-health',
-    slug: 'daegu-health',
-    name: '대구보건대학교',
-    emailDomain: 'dhc.ac.kr',
-    region: '대구',
-    isActive: true,
-  },
-  {
-    id: 'eulji',
-    slug: 'eulji',
-    name: '을지대학교',
-    emailDomain: 'eulji.ac.kr',
-    region: '경기',
-    isActive: true,
-  },
-];
+export const MOCK_UNIVERSITIES: University[] = SUPPORTED_UNIVERSITIES.map((university) => ({
+  ...university,
+}));
 
 export const MOCK_MAJORS: Major[] = [
   {
@@ -100,7 +69,7 @@ const NETWORK_BOARD: Board = {
   isActive: true,
 };
 
-export const MOCK_MAJOR_BOARDS: Board[] = MAJOR_GROUPS.map((group) => ({
+export const MOCK_MAJOR_BOARDS: Board[] = SUPPORTED_MAJOR_GROUPS.map((group) => ({
   id: `major-${group.id}`,
   slug: group.slug,
   title: `${group.label} 게시판`,
@@ -795,25 +764,6 @@ export const DEFAULT_SESSION_SCENARIO = MOCK_SESSION_SCENARIOS[0];
 
 export function getSessionScenarioById(scenarioId?: string) {
   return MOCK_SESSION_SCENARIOS.find((scenario) => scenario.id === scenarioId);
-}
-
-export function findUniversityByEmail(email: string) {
-  const normalized = email.trim().toLowerCase();
-  const domain = normalized.split('@')[1];
-
-  if (!domain) {
-    return undefined;
-  }
-
-  return MOCK_UNIVERSITIES.find((university) => university.emailDomain === domain);
-}
-
-export function getUniversityById(universityId?: string) {
-  return MOCK_UNIVERSITIES.find((university) => university.id === universityId);
-}
-
-export function getMajorGroupById(majorGroupId?: string) {
-  return MAJOR_GROUPS.find((group) => group.id === majorGroupId);
 }
 
 export function getMajorById(majorId?: string) {

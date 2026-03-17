@@ -2,14 +2,10 @@ import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { BOARD_SCOPE_LABELS, POST_CATEGORY_LABELS } from '@/constants/community';
-import {
-  getBoardById,
-  getMajorGroupById,
-  getUniversityById,
-} from '@/data/mock-community';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useCommunityData } from '@/hooks/use-community-data';
+import { getMajorGroupById, getUniversityById } from '@/lib/community/metadata';
 
 function getParamValue(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -20,6 +16,7 @@ export default function BoardScreen() {
   const params = useLocalSearchParams<{ boardId: string }>();
   const boardId = getParamValue(params.boardId);
   const {
+    getBoardById,
     getPostsByBoardId,
     getReadAccessForBoard,
     getWriteAccessForBoard,
@@ -93,7 +90,13 @@ export default function BoardScreen() {
             <Pressable
               key={post.id}
               style={styles.postItem}
-              onPress={() => router.push(`/(tabs)/posts/${post.id}` as never)}>
+              onPress={() =>
+                router.push(
+                  post.recruitmentId
+                    ? (`/(tabs)/recruitments/${post.recruitmentId}` as never)
+                    : (`/(tabs)/posts/${post.id}` as never)
+                )
+              }>
               <ThemedText type="defaultSemiBold">{post.title}</ThemedText>
               <ThemedText>{post.summary}</ThemedText>
               <ThemedText>

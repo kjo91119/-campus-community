@@ -49,7 +49,7 @@
 | `auth_started` | 사용자가 인증 시작 버튼 클릭 |
 | `school_email_submitted` | 학교 이메일 제출 |
 | `school_email_verified` | 학교 이메일 인증 성공 |
-| `manual_verification_started` | 학생증 수동 인증 시작 |
+| `manual_verification_started` | 학생증 수동 인증 화면 실제 진입 |
 | `manual_verification_submitted` | 학생증 제출 완료 |
 | `manual_verification_approved` | 운영 승인 |
 | `manual_verification_rejected` | 운영 반려 |
@@ -68,8 +68,7 @@
 | 이벤트명 | 트리거 |
 | --- | --- |
 | `home_viewed` | 홈 진입 |
-| `major_filter_applied` | 전공군 필터 선택 |
-| `category_filter_applied` | 카테고리 필터 선택 |
+| `major_filter_applied` | 사용자가 홈에서 전공군 필터를 직접 선택 |
 | `post_opened` | 글 상세 진입 |
 | `school_board_viewed` | 학교 보드 진입 |
 | `recruitment_list_viewed` | 모집 리스트 진입 |
@@ -82,7 +81,6 @@
 | `post_create_started` | 글쓰기 시작 |
 | `post_created` | 글 작성 완료 |
 | `comment_created` | 댓글 작성 완료 |
-| `reply_created` | 대댓글 작성 완료 |
 | `recruitment_created` | 모집글 작성 완료 |
 | `recruitment_interest_commented` | 모집글에서 참여 의사 댓글 작성 완료 |
 
@@ -92,8 +90,8 @@
 | --- | --- |
 | `report_submitted` | 신고 접수 완료 |
 | `user_blocked` | 사용자 차단 완료 |
-| `content_hidden_by_moderation` | 운영 블라인드 처리 |
 | `user_restricted` | 사용자 제재 처리 |
+| `user_banned` | 사용자 이용 정지 처리 |
 
 ## 이벤트에 함께 저장할 속성 예시
 
@@ -149,3 +147,19 @@
 ## 결론
 
 MVP 분석의 핵심은 "인증이 너무 무거운가", "홈이 살아 보이는가", "첫 참여가 일어나는가"를 확인하는 데 있다. 이벤트는 많아 보이더라도, 실제 의사결정에 쓰일 핵심 KPI 중심으로 최소한부터 설계하는 것이 좋다.
+
+## 현재 구현 메모
+
+- 현재 앱은 외부 분석 도구 대신 `AnalyticsProvider` 기반 로컬 이벤트 버퍼를 먼저 사용한다.
+- 이미 계측한 핵심 흐름은 인증 시작, 학교 이메일 제출/인증, 학생증 수동 인증 시작/제출/승인/반려, 온보딩 시작/완료, 홈/학교/모집 진입, 글/댓글/모집 생성, 신고/차단이다.
+- `manual_verification_started`는 CTA 클릭이 아니라 수동 인증 화면 진입 시점 한 군데에서만 기록한다.
+- `major_filter_applied`는 홈 첫 mount가 아니라 사용자가 전공군 필터를 직접 누를 때만 기록한다.
+- 다음 단계에서 PostHog 같은 외부 툴을 붙일 때는 이 버퍼의 `track(...)` 진입점을 서버 전송 또는 SDK 호출로 교체하면 된다.
+
+## 다음 단계 후보 이벤트
+
+- `category_filter_applied`
+- `reply_created`
+- `content_hidden_by_moderation`
+
+위 세 이벤트는 문서 초안에는 있었지만 아직 현재 MVP 코드에는 계측하지 않았다. 실제 제품 해석에 꼭 필요해지는 시점에 별도 추가하는 편이 안전하다.

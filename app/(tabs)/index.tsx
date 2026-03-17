@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -6,31 +6,59 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { MAJOR_GROUPS } from '@/constants/major-groups';
-import {
-  getMajorGroupById,
-  getUniversityById,
-  MOCK_MAJOR_BOARDS,
-} from '@/data/mock-community';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAnalytics } from '@/hooks/use-analytics';
 import { useCommunityData } from '@/hooks/use-community-data';
 import { useAppSession } from '@/hooks/use-app-session';
+import {
+  SUPPORTED_MAJOR_GROUPS,
+  getMajorGroupById,
+  getUniversityById,
+} from '@/lib/community/metadata';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { track } = useAnalytics();
   const { profile, isReadOnly } = useAppSession();
-  const { getPostsByBoardId, isHydrating } = useCommunityData();
+  const { getMajorBoards, getNetworkBoard, getPostsByBoardId, isHydrating } = useCommunityData();
   const [selectedMajorId, setSelectedMajorId] = useState<string>('all');
   const currentUniversity = getUniversityById(profile.primaryUniversityId);
   const currentMajorGroup = getMajorGroupById(profile.primaryMajorGroupId);
-  const networkPosts = getPostsByBoardId('network-home').filter(
+  const majorBoards = getMajorBoards();
+  const networkBoard = getNetworkBoard();
+  const networkPosts = getPostsByBoardId(networkBoard?.id).filter(
     (post) => post.postType !== 'recruitment'
   );
   const filteredPosts =
     selectedMajorId === 'all'
       ? networkPosts
       : networkPosts.filter((post) => post.majorGroupId === selectedMajorId);
+  const hasTrackedHomeViewRef = useRef(false);
+
+  useEffect(() => {
+    if (hasTrackedHomeViewRef.current) {
+      return;
+    }
+
+    track('home_viewed', {
+      university_id: profile.primaryUniversityId ?? null,
+      major_group: profile.primaryMajorGroupId ?? null,
+    });
+    hasTrackedHomeViewRef.current = true;
+  }, [profile.primaryMajorGroupId, profile.primaryUniversityId, track]);
+
+  const handleSelectMajorFilter = (nextMajorId: string) => {
+    if (selectedMajorId === nextMajorId) {
+      return;
+    }
+
+    setSelectedMajorId(nextMajorId);
+    track('major_filter_applied', {
+      major_group: nextMajorId === 'all' ? null : nextMajorId,
+      source: 'home',
+    });
+  };
 
   if (isHydrating) {
     return null;
@@ -54,17 +82,17 @@ export default function HomeScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <ThemedView style={styles.filterRow}>
             <Pressable
-              onPress={() => setSelectedMajorId('all')}
+              onPress={() => handleSelectMajorFilter('all')}
               style={[styles.filterChip, selectedMajorId === 'all' && styles.filterChipSelected]}>
               <ThemedText type="defaultSemiBold">전체</ThemedText>
             </Pressable>
-            {MAJOR_GROUPS.map((group) => {
+            {SUPPORTED_MAJOR_GROUPS.map((group) => {
               const selected = selectedMajorId === group.id;
 
               return (
                 <Pressable
                   key={group.id}
-                  onPress={() => setSelectedMajorId(group.id)}
+                  onPress={() => handleSelectMajorFilter(group.id)}
                   style={[styles.filterChip, selected && styles.filterChipSelected]}>
                   <ThemedText type="defaultSemiBold">{group.label}</ThemedText>
                 </Pressable>
@@ -77,12 +105,19 @@ export default function HomeScreen() {
       <ThemedView style={styles.card}>
         <ThemedText type="subtitle">빠른 진입</ThemedText>
         <ThemedView style={styles.quickActions}>
-          <Pressable
-            style={styles.quickAction}
-            onPress={() => router.push('/(tabs)/write?boardId=network-home' as never)}>
-            <ThemedText type="defaultSemiBold">통합 홈에 글쓰기</ThemedText>
-            <ThemedText>네트워크 전체에 보이는 일반글/질문글을 먼저 작성합니다.</ThemedText>
-          </Pressable>
+          {networkBoard ? (
+            <Pressable
+              style={styles.quickAction}
+              onPress={() => router.push(`/(tabs)/write?boardId=${networkBoard.id}` as never)}>
+              <ThemedText type="defaultSemiBold">통합 홈에 글쓰기</ThemedText>
+              <ThemedText>네트워크 전체에 보이는 일반글/질문글을 먼저 작성합니다.</ThemedText>
+            </Pressable>
+          ) : (
+            <ThemedView style={styles.quickAction}>
+              <ThemedText type="defaultSemiBold">통합 홈 보드가 비활성화되었습니다.</ThemedText>
+              <ThemedText>현재는 통합 홈 글쓰기 진입을 열 수 없습니다.</ThemedText>
+            </ThemedView>
+          )}
           <Pressable style={styles.quickAction} onPress={() => router.push('./school')}>
             <ThemedText type="defaultSemiBold">학교 게시판으로 이동</ThemedText>
             <ThemedText>같은 학교 인증 사용자만 보는 보드와 댓글 흐름을 확인합니다.</ThemedText>
@@ -92,7 +127,7 @@ export default function HomeScreen() {
 
       <ThemedView style={styles.card}>
         <ThemedText type="subtitle">전공 게시판 진입</ThemedText>
-        {MOCK_MAJOR_BOARDS.map((board) => (
+        {majorBoards.map((board) => (
           <Pressable
             key={board.id}
             style={styles.quickAction}
@@ -115,7 +150,11 @@ export default function HomeScreen() {
 
       <ThemedView style={styles.card}>
         <ThemedText type="subtitle">통합 홈 피드</ThemedText>
-        {filteredPosts.length === 0 ? (
+        {!networkBoard ? (
+          <ThemedText>
+            통합 홈 보드가 현재 비활성화되어 피드를 불러올 수 없습니다.
+          </ThemedText>
+        ) : filteredPosts.length === 0 ? (
           <ThemedText>아직 조건에 맞는 글이 없습니다. 첫 글을 작성해 보세요.</ThemedText>
         ) : (
           filteredPosts.map((post) => (

@@ -30,6 +30,7 @@
 - `reports`: 신고
 - `blocks`: 차단
 - `recruitments`: 모집글 메타데이터
+- `moderation_events`: 운영 조치 이력
 - `notifications`: 인앱 알림
 
 ## 테이블 초안
@@ -48,8 +49,8 @@
 | nickname | text | 공개 닉네임 |
 | role | text | `user`, `moderator`, `admin` |
 | status | text | `active`, `restricted`, `banned` |
-| primary_university_id | uuid nullable | 인증된 학교 |
-| primary_major_group_id | uuid nullable | 주 전공군 |
+| primary_university_id | text nullable | 인증된 학교 |
+| primary_major_group_id | text nullable | 주 전공군 |
 | major_label | text nullable | 사용자 입력 세부 학과명 |
 | verification_status | text | `unverified`, `pending`, `verified`, `rejected` |
 | onboarding_completed_at | timestamptz nullable | 온보딩 완료 시점 |
@@ -59,6 +60,7 @@
 
 - 장기적으로는 `primary_university_id`, `primary_major_group_id`를 각 마스터 테이블을 참조하는 uuid FK로 두는 방향을 권장한다.
 - 다만 현재 Phase 1 앱 구현과 초기 `profiles` 마이그레이션은 앱 내부 string ID 체계에 맞춰 두 컬럼을 `text`로 두고 있으며, 이후 `universities` / `major_groups` 실테이블 도입 시 FK 정규화가 필요하다.
+- 현재 앱은 `profiles` 전체 공개 select 대신, 글/댓글 작성자 표시용 최소 정보만 `list_profile_summaries(...)` RPC로 읽는 방향을 사용한다.
 
 ### 2. universities
 
@@ -121,13 +123,18 @@
 | id | uuid PK | 인증 요청 ID |
 | profile_id | uuid FK | 대상 사용자 |
 | method | text | `email`, `student_id_manual` |
-| university_id | uuid nullable | 인증 학교 |
+| university_id | text nullable | 인증 학교 |
 | status | text | `pending`, `approved`, `rejected` |
 | submitted_at | timestamptz | 제출 시각 |
 | reviewed_at | timestamptz nullable | 검토 시각 |
 | reviewer_profile_id | uuid nullable | 검토자 |
 | evidence_url | text nullable | 수동 인증 자료 경로 |
 | rejection_reason | text nullable | 반려 사유 |
+
+메모:
+
+- 장기적으로는 `verifications.university_id`도 `universities.id`를 참조하는 uuid FK로 두는 방향을 권장한다.
+- 다만 현재 앱 구현과 `students_id_manual` fallback SQL 초안은 `profiles.primary_university_id`와 같은 string ID 체계를 사용하므로, 현 단계에서는 `text`로 유지하고 이후 학교 마스터 실테이블 도입 시 FK 정규화가 필요하다.
 
 ### 6. boards
 
@@ -221,12 +228,20 @@
 | --- | --- | --- |
 | id | uuid PK | 신고 ID |
 | reporter_profile_id | uuid FK | 신고자 |
-| target_type | text | `post`, `comment`, `profile` |
+| target_type | text | `post`, `comment`, `recruitment`, `profile` |
 | target_id | uuid | 대상 ID |
+| target_profile_id | uuid nullable | 대상 작성자 |
 | reason_code | text | 신고 사유 |
 | detail | text nullable | 상세 사유 |
 | status | text | `open`, `reviewing`, `resolved`, `dismissed` |
+| reviewer_profile_id | uuid nullable | 검토자 |
+| reviewed_at | timestamptz nullable | 검토 시각 |
 | created_at | timestamptz | 생성일 |
+
+메모:
+
+- 현재 구현은 `submit_report(...)`, `list_my_reports()` RPC를 통해 신고를 생성/조회한다.
+- 직접 insert 대신 RPC를 사용하고, 신고자는 자기 신고만 읽는다.
 
 ### 11. blocks
 
@@ -242,6 +257,11 @@
 | blocker_profile_id | uuid FK | 차단한 사용자 |
 | blocked_profile_id | uuid FK | 차단당한 사용자 |
 | created_at | timestamptz | 생성일 |
+
+메모:
+
+- 현재 구현은 `block_profile(...)`, `unblock_profile(...)`, `list_my_blocks()` RPC와 함께 간다.
+- 차단은 개인화 기능이며 운영 제재와 분리된 사용자별 숨김 관계다.
 
 ### 12. recruitments
 
@@ -268,7 +288,32 @@ MVP 메모:
 - 모집 상세 화면의 CTA는 "참여 의사 댓글 남기기"로 통일한다.
 - 별도 지원 테이블은 모집량과 운영 필요가 커진 뒤 V1 이후 검토한다.
 
-### 13. notifications
+### 13. moderation_events
+
+역할:
+
+- 운영자가 신고, 콘텐츠, 사용자에 대해 어떤 조치를 했는지 남긴다.
+
+주요 컬럼 예시:
+
+| 컬럼 | 타입 | 설명 |
+| --- | --- | --- |
+| id | uuid PK | 조치 ID |
+| actor_profile_id | uuid nullable FK | 조치를 수행한 운영자 |
+| action_type | text | `report_reviewing`, `report_resolved`, `content_hidden`, `user_banned` 등 |
+| target_type | text | `report`, `post`, `comment`, `recruitment`, `profile` |
+| target_id | uuid | 조치 대상 ID |
+| target_profile_id | uuid nullable FK | 대상 사용자 |
+| report_id | uuid nullable FK | 연계 신고 |
+| note | text nullable | 내부 메모 |
+| created_at | timestamptz | 생성일 |
+
+메모:
+
+- 현재 구현은 `apply_moderation_action(...)` RPC로 조치와 이력을 함께 남긴다.
+- MVP 단계에서는 별도 관리자 UI보다 SQL/RPC와 운영 절차를 먼저 고정한다.
+
+### 14. notifications
 
 역할:
 

@@ -59,6 +59,8 @@ export default function TabLayout() {
       />
       <Tabs.Screen name="boards/[boardId]" options={{ href: null }} />
       <Tabs.Screen name="posts/[postId]" options={{ href: null }} />
+      <Tabs.Screen name="recruitments/[recruitmentId]" options={{ href: null }} />
+      <Tabs.Screen name="recruit-write" options={{ href: null }} />
       <Tabs.Screen name="write" options={{ href: null }} />
     </Tabs>
   );

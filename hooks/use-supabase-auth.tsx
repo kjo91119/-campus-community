@@ -13,17 +13,18 @@ import type {
 } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 
-import { findUniversityByEmail } from '@/data/mock-community';
 import {
   getSupabaseBootstrap,
   getSupabaseClient,
   registerSupabaseAutoRefresh,
   type SupabaseBootstrap,
 } from '@/lib/supabase/client';
+import { findUniversityByEmail } from '@/lib/community/metadata';
 
 type AuthCredentials = {
   email: string;
   password: string;
+  verificationPath?: 'school_email' | 'manual_student_id';
 };
 
 type AuthActionResult = {
@@ -165,14 +166,16 @@ export function SupabaseAuthProvider({ children }: PropsWithChildren) {
   const signUpWithEmail = async ({
     email,
     password,
+    verificationPath = 'school_email',
   }: AuthCredentials): Promise<AuthActionResult> => {
     if (bootstrap.status !== 'ready_for_client_wiring') {
       return { ok: false, message: 'Supabase 환경변수가 아직 준비되지 않았습니다.' };
     }
 
     const normalizedEmail = normalizeSchoolEmail(email);
+    const isSchoolEmailFlow = verificationPath === 'school_email';
 
-    if (!findUniversityByEmail(normalizedEmail)) {
+    if (isSchoolEmailFlow && !findUniversityByEmail(normalizedEmail)) {
       return { ok: false, message: '지원하는 학교 이메일 도메인으로만 가입할 수 있습니다.' };
     }
 
@@ -197,7 +200,9 @@ export function SupabaseAuthProvider({ children }: PropsWithChildren) {
 
       return {
         ok: true,
-        message: '가입 요청이 생성되었습니다. 학교 이메일로 전송된 확인 링크를 누른 뒤 로그인해 주세요.',
+        message: isSchoolEmailFlow
+          ? '가입 요청이 생성되었습니다. 학교 이메일로 전송된 확인 링크를 누른 뒤 로그인해 주세요.'
+          : '계정 생성 요청이 완료되었습니다. 입력한 이메일의 확인 링크를 누른 뒤 로그인하고 학생증 수동 인증을 진행해 주세요.',
         nextStep: 'await_email_confirmation',
       };
     }
@@ -216,10 +221,6 @@ export function SupabaseAuthProvider({ children }: PropsWithChildren) {
     }
 
     const normalizedEmail = normalizeSchoolEmail(email);
-
-    if (!findUniversityByEmail(normalizedEmail)) {
-      return { ok: false, message: '지원하는 학교 이메일 도메인으로만 로그인할 수 있습니다.' };
-    }
 
     const { error } = await getAuthClient().signInWithPassword({
       email: normalizedEmail,

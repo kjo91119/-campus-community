@@ -7,23 +7,68 @@ import {
   type PropsWithChildren,
 } from 'react';
 
-import { COMMUNITY_VALIDATION } from '@/constants/community';
 import {
-  getBoardById,
-  getProfileById as getMockProfileById,
+  COMMUNITY_VALIDATION,
+  REPORT_REASON_OPTIONS,
+  RECRUITMENT_COMMENT_PROMPTS,
+} from '@/constants/community';
+import {
+  buildAuthorProfilesAfterRemoteHydrate,
+  buildPersistedAuthorProfiles,
+  collectAuthorProfileIdsFromRows,
+  filterUuidProfileIds,
+} from '@/lib/community/author-profile-cache';
+import { buildCommunityStateAfterRemoteHydrate, cloneCommunityState } from '@/lib/community/community-state-cache';
+import {
+  buildBlockedProfileEntries,
+  buildBlockedProfileIds,
+  prependBlockRecord,
+  prependReportRecord,
+} from '@/lib/community/report-block-state';
+import {
+  MOCK_BOARDS,
   MOCK_COMMENTS,
+  MOCK_PROFILES,
   MOCK_POSTS,
+  MOCK_RECRUITMENTS,
 } from '@/data/mock-community';
+import { useAnalytics } from '@/hooks/use-analytics';
 import { useAppSession } from '@/hooks/use-app-session';
+import { listActiveBoards } from '@/lib/supabase/boards';
+import { fetchCommunitySnapshot } from '@/lib/supabase/community';
+import { getSupabaseBootstrap } from '@/lib/supabase/client';
+import { insertComment } from '@/lib/supabase/comments';
+import {
+  blockProfileRemote,
+  listMyBlocks,
+  listMyReports,
+  submitReport,
+  unblockProfileRemote,
+} from '@/lib/supabase/moderation';
+import { insertPost } from '@/lib/supabase/posts';
+import {
+  listProfileSummariesByIds,
+  toProfileSummary,
+} from '@/lib/supabase/profiles';
+import { createRecruitmentWithPost } from '@/lib/supabase/recruitments';
 import type {
   Board,
+  BlockRecord,
+  BlockedProfileEntry,
   Comment,
   CommentRow,
   CommunityPost,
   PostCategory,
   PostRow,
   PostType,
-  Profile,
+  ProfileSummary,
+  ReportReason,
+  ReportRecord,
+  ReportTargetType,
+  RecruitmentCard,
+  RecruitmentMode,
+  RecruitmentRow,
+  RecruitmentType,
 } from '@/types/domain';
 
 type CreatePostInput = {
@@ -34,9 +79,27 @@ type CreatePostInput = {
   postType: Exclude<PostType, 'recruitment'>;
 };
 
+type CreateRecruitmentInput = {
+  boardId: string;
+  title: string;
+  body: string;
+  recruitmentType: RecruitmentType;
+  mode: RecruitmentMode;
+  headcount: string;
+  deadlineDays?: number;
+  preferredMajorGroupId?: string;
+};
+
 type CreateCommentInput = {
   postId: string;
   body: string;
+};
+
+type ReportTargetInput = {
+  targetType: ReportTargetType;
+  targetId: string;
+  reason: ReportReason;
+  targetProfileId?: string;
 };
 
 type CommunityActionResult = {
@@ -44,6 +107,9 @@ type CommunityActionResult = {
   message?: string;
   postId?: string;
   commentId?: string;
+  recruitmentId?: string;
+  reportId?: string;
+  blockId?: string;
 };
 
 type AccessResult = {
@@ -53,29 +119,50 @@ type AccessResult = {
 
 type CommunityContextValue = {
   isHydrating: boolean;
+  getBoardById: (boardId?: string) => Board | undefined;
+  getNetworkBoard: () => Board | undefined;
+  getMajorBoards: () => Board[];
+  getMajorBoardByMajorGroupId: (majorGroupId?: string) => Board | undefined;
+  getSchoolBoardByUniversityId: (universityId?: string) => Board | undefined;
   getPostById: (postId?: string) => CommunityPost | undefined;
   getPostsByBoardId: (boardId?: string) => CommunityPost[];
   getCommentsByPostId: (postId?: string) => Comment[];
+  getRecruitments: (majorGroupId?: string) => RecruitmentCard[];
+  getRecruitmentById: (recruitmentId?: string) => RecruitmentCard | undefined;
   getReadAccessForBoard: (boardId?: string) => AccessResult;
   getReadAccessForPost: (postId?: string) => AccessResult;
+  getReadAccessForRecruitment: (recruitmentId?: string) => AccessResult;
   getWriteAccessForBoard: (boardId?: string) => AccessResult;
   getCommentAccessForPost: (postId?: string) => AccessResult;
+  getBlockedProfiles: () => BlockedProfileEntry[];
+  isBlockedProfile: (profileId?: string) => boolean;
   createPost: (input: CreatePostInput) => Promise<CommunityActionResult>;
+  createRecruitment: (input: CreateRecruitmentInput) => Promise<CommunityActionResult>;
   createComment: (input: CreateCommentInput) => Promise<CommunityActionResult>;
+  reportTarget: (input: ReportTargetInput) => Promise<CommunityActionResult>;
+  blockProfile: (profileId?: string) => Promise<CommunityActionResult>;
+  unblockProfile: (profileId?: string) => Promise<CommunityActionResult>;
 };
 
 type CommunityState = {
   posts: PostRow[];
   comments: CommentRow[];
+  recruitments: RecruitmentRow[];
 };
 
 type PersistedCommunityState = {
   version: number;
   state: CommunityState;
+  boards?: Board[];
+  authorProfiles?: ProfileSummary[];
+  reports?: ReportRecord[];
+  blocks?: BlockRecord[];
 };
 
 const COMMUNITY_STORAGE_KEY = 'campus-community:community-store';
-const COMMUNITY_STORAGE_VERSION = 2;
+const COMMUNITY_STORAGE_VERSION = 7;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const INITIAL_COMMUNITY_STATE: CommunityState = {
   posts: MOCK_POSTS.map((post) => ({
@@ -106,7 +193,24 @@ const INITIAL_COMMUNITY_STATE: CommunityState = {
     isAnonymous: comment.isAnonymous,
     createdAt: comment.createdAt,
   })),
+  recruitments: MOCK_RECRUITMENTS.map((recruitment) => ({
+    id: recruitment.id,
+    postId: recruitment.postId,
+    recruitmentType: recruitment.recruitmentType,
+    status: recruitment.status,
+    headcount: recruitment.headcount,
+    mode: recruitment.mode,
+    deadlineAt: recruitment.deadlineAt,
+    preferredMajorGroupId: recruitment.preferredMajorGroupId,
+    createdAt: recruitment.createdAt,
+  })),
 };
+
+const INITIAL_BOARDS = MOCK_BOARDS.filter((board) => board.isActive);
+const FALLBACK_AUTHOR_PROFILES = MOCK_PROFILES.map((profile) => toProfileSummary(profile));
+const FALLBACK_AUTHOR_PROFILE_MAP = new Map(
+  FALLBACK_AUTHOR_PROFILES.map((profile) => [profile.id, profile])
+);
 
 const CommunityContext = createContext<CommunityContextValue | null>(null);
 
@@ -118,12 +222,52 @@ function sortCommentsAscending(comments: CommentRow[]) {
   return [...comments].sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt));
 }
 
+function sortRecruitmentsDescending(recruitments: RecruitmentRow[]) {
+  return [...recruitments].sort(
+    (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)
+  );
+}
+
+function sortBoardsForDisplay(boards: Board[]) {
+  const scopeOrder: Record<Board['scopeType'], number> = {
+    network: 0,
+    major_group: 1,
+    university: 2,
+  };
+
+  return [...boards].sort((left, right) => {
+    const scopeDiff = scopeOrder[left.scopeType] - scopeOrder[right.scopeType];
+
+    if (scopeDiff !== 0) {
+      return scopeDiff;
+    }
+
+    return left.title.localeCompare(right.title, 'ko');
+  });
+}
+
 function createPostId() {
   return `local-post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function createCommentId() {
   return `local-comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createRecruitmentId() {
+  return `local-recruit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createReportId() {
+  return `local-report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createBlockId() {
+  return `local-block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isUuidLike(value?: string) {
+  return Boolean(value && UUID_PATTERN.test(value));
 }
 
 function buildRelativeLabel(createdAt: string) {
@@ -157,6 +301,62 @@ function buildSummary(body: string) {
   }
 
   return `${normalized.slice(0, COMMUNITY_VALIDATION.summaryMaxLength - 1)}...`;
+}
+
+function buildHeadcountLabel(headcount?: number) {
+  if (!headcount) {
+    return '인원 미정';
+  }
+
+  return `${headcount}명 모집`;
+}
+
+function buildDeadlineLabel(deadlineAt?: string) {
+  if (!deadlineAt) {
+    return '상시 모집';
+  }
+
+  const diffMs = Date.parse(deadlineAt) - Date.now();
+
+  if (diffMs <= 0) {
+    return '마감됨';
+  }
+
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 1) {
+    return '하루 이내 마감';
+  }
+
+  return `마감 ${diffDays}일 전`;
+}
+
+function buildDeadlineAt(days?: number) {
+  if (!days) {
+    return undefined;
+  }
+
+  const nextDate = new Date();
+  nextDate.setDate(nextDate.getDate() + days);
+  nextDate.setHours(23, 59, 0, 0);
+
+  return nextDate.toISOString();
+}
+
+function getRecruitmentClosedMessage(status: RecruitmentRow['status']) {
+  if (status === 'completed') {
+    return '완료된 모집이라 참여 의사 댓글을 남길 수 없습니다.';
+  }
+
+  return '이미 마감된 모집이라 참여 의사 댓글을 남길 수 없습니다.';
+}
+
+function getLocalFallbackWriteMessage(contentLabel: '게시글' | '모집글' | '댓글') {
+  return `${contentLabel}이 로컬 임시 상태에만 반영되었습니다. 이후 서버 snapshot 동기화가 성공하면 이 임시 데이터는 사라질 수 있습니다.`;
+}
+
+function getLocalModerationMessage(actionLabel: '신고' | '차단' | '차단 해제') {
+  return `${actionLabel}가 로컬 데모 상태에만 반영되었습니다. 운영 검토 큐와 서버 동기화는 다음 단계에서 연결됩니다.`;
 }
 
 function normalizePostRow(value: unknown): PostRow | undefined {
@@ -235,30 +435,159 @@ function normalizeCommentRow(value: unknown): CommentRow | undefined {
   };
 }
 
-function mergeRowsById<Row extends { id: string }>(seedRows: Row[], storedRows: Row[]) {
-  const rowMap = new Map<string, Row>();
+function normalizeRecruitmentRow(value: unknown): RecruitmentRow | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
 
-  seedRows.forEach((row) => {
-    rowMap.set(row.id, row);
-  });
+  const candidate = value as Partial<RecruitmentCard> & Partial<RecruitmentRow>;
 
-  storedRows.forEach((row) => {
-    rowMap.set(row.id, row);
-  });
+  if (
+    !candidate.id ||
+    !candidate.postId ||
+    !candidate.recruitmentType ||
+    !candidate.status ||
+    !candidate.createdAt
+  ) {
+    return undefined;
+  }
 
-  return [...rowMap.values()];
+  return {
+    id: candidate.id,
+    postId: candidate.postId,
+    recruitmentType: candidate.recruitmentType,
+    status: candidate.status,
+    headcount: candidate.headcount,
+    mode: candidate.mode,
+    deadlineAt: candidate.deadlineAt,
+    preferredMajorGroupId: candidate.preferredMajorGroupId,
+    createdAt: candidate.createdAt,
+  };
 }
 
-function mergeWithSeed(state: CommunityState): CommunityState {
+function normalizeBoard(value: unknown): Board | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as Partial<Board>;
+
+  if (
+    !candidate.id ||
+    !candidate.slug ||
+    !candidate.title ||
+    !candidate.description ||
+    !candidate.scopeType ||
+    !candidate.visibility ||
+    typeof candidate.isActive !== 'boolean'
+  ) {
+    return undefined;
+  }
+
   return {
-    posts: mergeRowsById(INITIAL_COMMUNITY_STATE.posts, state.posts),
-    comments: mergeRowsById(INITIAL_COMMUNITY_STATE.comments, state.comments),
+    id: candidate.id,
+    slug: candidate.slug,
+    title: candidate.title,
+    description: candidate.description,
+    scopeType: candidate.scopeType,
+    visibility: candidate.visibility,
+    majorGroupId: candidate.majorGroupId,
+    universityId: candidate.universityId,
+    postTypeDefault: candidate.postTypeDefault,
+    isActive: candidate.isActive,
   };
+}
+
+function normalizeProfileSummary(value: unknown): ProfileSummary | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as Partial<ProfileSummary>;
+
+  if (!candidate.id || !candidate.nickname || !candidate.verificationStatus) {
+    return undefined;
+  }
+
+  return {
+    id: candidate.id,
+    nickname: candidate.nickname,
+    primaryUniversityId: candidate.primaryUniversityId,
+    primaryMajorGroupId: candidate.primaryMajorGroupId,
+    verificationStatus: candidate.verificationStatus,
+  };
+}
+
+function normalizeReportRecord(value: unknown): ReportRecord | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as Partial<ReportRecord>;
+
+  if (
+    !candidate.id ||
+    !candidate.reporterProfileId ||
+    !candidate.targetType ||
+    !candidate.targetId ||
+    !candidate.reason ||
+    !candidate.createdAt
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: candidate.id,
+    reporterProfileId: candidate.reporterProfileId,
+    targetType: candidate.targetType,
+    targetId: candidate.targetId,
+    targetProfileId: candidate.targetProfileId,
+    reason: candidate.reason,
+    detail: candidate.detail,
+    status: candidate.status,
+    reviewerProfileId: candidate.reviewerProfileId,
+    reviewedAt: candidate.reviewedAt,
+    createdAt: candidate.createdAt,
+  };
+}
+
+function normalizeBlockRecord(value: unknown): BlockRecord | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as Partial<BlockRecord>;
+
+  if (
+    !candidate.id ||
+    !candidate.blockerProfileId ||
+    !candidate.blockedProfileId ||
+    !candidate.createdAt
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: candidate.id,
+    blockerProfileId: candidate.blockerProfileId,
+    blockedProfileId: candidate.blockedProfileId,
+    createdAt: candidate.createdAt,
+  };
+}
+
+function prependOrReplaceRow<Row extends { id: string }>(rows: Row[], nextRow: Row) {
+  return [nextRow, ...rows.filter((row) => row.id !== nextRow.id)];
 }
 
 function parseCommunityState(rawValue: string | null) {
   if (!rawValue) {
-    return { state: INITIAL_COMMUNITY_STATE };
+    return {
+      state: cloneCommunityState(INITIAL_COMMUNITY_STATE),
+      boards: INITIAL_BOARDS,
+      authorProfiles: [],
+      reports: [],
+      blocks: [],
+    };
   }
 
   try {
@@ -267,21 +596,31 @@ function parseCommunityState(rawValue: string | null) {
       | {
           posts?: unknown[];
           comments?: unknown[];
+          recruitments?: unknown[];
+          boards?: unknown[];
+          authorProfiles?: unknown[];
         };
     const legacyParsed = parsed as {
       posts?: unknown[];
       comments?: unknown[];
+      recruitments?: unknown[];
+      boards?: unknown[];
+      authorProfiles?: unknown[];
     };
+    const storedVersion =
+      'version' in parsed && typeof parsed.version === 'number' ? parsed.version : 0;
 
     const rawState: {
       posts?: unknown[];
       comments?: unknown[];
+      recruitments?: unknown[];
     } =
       'state' in parsed && parsed.state
         ? parsed.state
         : {
             posts: legacyParsed.posts,
             comments: legacyParsed.comments,
+            recruitments: legacyParsed.recruitments,
           };
 
     const nextState: CommunityState = {
@@ -293,13 +632,58 @@ function parseCommunityState(rawValue: string | null) {
             .map(normalizeCommentRow)
             .filter((item): item is CommentRow => Boolean(item))
         : [],
+      recruitments: Array.isArray(rawState.recruitments)
+        ? rawState.recruitments
+            .map(normalizeRecruitmentRow)
+            .filter((item): item is RecruitmentRow => Boolean(item))
+        : [],
     };
 
+    const rawBoards =
+      'boards' in parsed && Array.isArray(parsed.boards) ? parsed.boards : legacyParsed.boards;
+    const hasStoredBoards = Array.isArray(rawBoards);
+    const nextBoards = hasStoredBoards
+      ? rawBoards.map(normalizeBoard).filter((item): item is Board => Boolean(item))
+      : INITIAL_BOARDS;
+    const rawAuthorProfiles =
+      storedVersion >= COMMUNITY_STORAGE_VERSION &&
+      'authorProfiles' in parsed &&
+      Array.isArray(parsed.authorProfiles)
+        ? parsed.authorProfiles
+        : [];
+    const nextAuthorProfiles = Array.isArray(rawAuthorProfiles)
+      ? rawAuthorProfiles
+          .map(normalizeProfileSummary)
+          .filter((item): item is ProfileSummary => Boolean(item))
+      : [];
+    const nextReports =
+      'reports' in parsed && Array.isArray(parsed.reports)
+        ? parsed.reports
+            .map(normalizeReportRecord)
+            .filter((item): item is ReportRecord => Boolean(item))
+        : [];
+    const nextBlocks =
+      'blocks' in parsed && Array.isArray(parsed.blocks)
+        ? parsed.blocks
+            .map(normalizeBlockRecord)
+            .filter((item): item is BlockRecord => Boolean(item))
+        : [];
+
     return {
-      state: mergeWithSeed(nextState),
+      state: cloneCommunityState(nextState),
+      boards: sortBoardsForDisplay(nextBoards.filter((board) => board.isActive)),
+      authorProfiles: nextAuthorProfiles,
+      reports: nextReports,
+      blocks: nextBlocks,
     };
   } catch {
-    return { state: INITIAL_COMMUNITY_STATE };
+    return {
+      state: cloneCommunityState(INITIAL_COMMUNITY_STATE),
+      boards: INITIAL_BOARDS,
+      authorProfiles: [],
+      reports: [],
+      blocks: [],
+    };
   }
 }
 
@@ -361,10 +745,17 @@ function getBoardWriteAccess({
 }
 
 export function CommunityProvider({ children }: PropsWithChildren) {
+  const { track } = useAnalytics();
   const { canAccessCommunity, isAuthenticated, isReadOnly, profile } = useAppSession();
+  const [boards, setBoards] = useState<Board[]>(INITIAL_BOARDS);
+  const [authorProfiles, setAuthorProfiles] = useState<ProfileSummary[]>([]);
+  const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [blocks, setBlocks] = useState<BlockRecord[]>([]);
   const [state, setState] = useState<CommunityState>(INITIAL_COMMUNITY_STATE);
   const [isHydrating, setIsHydrating] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const isSupabaseReady = getSupabaseBootstrap().status === 'ready_for_client_wiring';
+  const currentProfileSummary = toProfileSummary(profile);
 
   useEffect(() => {
     let active = true;
@@ -372,12 +763,86 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     const hydrate = async () => {
       const storedValue = await AsyncStorage.getItem(COMMUNITY_STORAGE_KEY);
       const parsed = parseCommunityState(storedValue);
+      let nextState = parsed.state;
+      let nextBoards = parsed.boards;
+      let nextAuthorProfiles = buildPersistedAuthorProfiles({
+        currentProfileSummary,
+        existingProfiles: parsed.authorProfiles,
+      });
+      let nextReports = parsed.reports;
+      let nextBlocks = parsed.blocks;
+
+      if (isSupabaseReady && canAccessCommunity && isAuthenticated) {
+        const [
+          remoteSnapshot,
+          remoteBoardsResult,
+          remoteReportsResult,
+          remoteBlocksResult,
+        ] = await Promise.all([
+          fetchCommunitySnapshot(),
+          listActiveBoards(),
+          listMyReports(),
+          listMyBlocks(),
+        ]);
+
+        if (remoteSnapshot.ok && remoteSnapshot.state) {
+          nextState = buildCommunityStateAfterRemoteHydrate({
+            remoteState: remoteSnapshot.state,
+          });
+        }
+
+        if (remoteBoardsResult.ok && remoteBoardsResult.boards) {
+          nextBoards = sortBoardsForDisplay(
+            remoteBoardsResult.boards.filter((board) => board.isActive)
+          );
+        }
+
+        if (remoteReportsResult.ok && remoteReportsResult.reports) {
+          nextReports = remoteReportsResult.reports;
+        }
+
+        if (remoteBlocksResult.ok && remoteBlocksResult.blocks) {
+          nextBlocks = remoteBlocksResult.blocks;
+        }
+
+        const nextAuthorProfileIds = [
+          ...new Set([
+            ...collectAuthorProfileIdsFromRows(nextState.posts, nextState.comments),
+            ...nextBlocks.map((block) => block.blockedProfileId),
+          ]),
+        ];
+
+        const remoteAuthorProfilesResult = await listProfileSummariesByIds(
+          filterUuidProfileIds(nextAuthorProfileIds)
+        );
+
+        if (remoteAuthorProfilesResult.ok && remoteAuthorProfilesResult.profiles) {
+          nextAuthorProfiles = buildAuthorProfilesAfterRemoteHydrate({
+            currentProfileSummary,
+            remoteProfiles: remoteAuthorProfilesResult.profiles,
+          });
+        } else {
+          nextAuthorProfiles = buildPersistedAuthorProfiles({
+            currentProfileSummary,
+            existingProfiles: nextAuthorProfiles,
+          });
+        }
+      } else {
+        nextAuthorProfiles = buildPersistedAuthorProfiles({
+          currentProfileSummary,
+          existingProfiles: nextAuthorProfiles,
+        });
+      }
 
       if (!active) {
         return;
       }
 
-      setState(parsed.state);
+      setBoards(nextBoards);
+      setAuthorProfiles(nextAuthorProfiles);
+      setReports(nextReports);
+      setBlocks(nextBlocks);
+      setState(nextState);
       setIsHydrating(false);
       setHasLoaded(true);
     };
@@ -387,7 +852,14 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [
+    canAccessCommunity,
+    currentProfileSummary,
+    isAuthenticated,
+    isSupabaseReady,
+    profile.id,
+    profile.primaryUniversityId,
+  ]);
 
   useEffect(() => {
     if (!hasLoaded) {
@@ -397,18 +869,59 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     const payload: PersistedCommunityState = {
       version: COMMUNITY_STORAGE_VERSION,
       state,
+      boards,
+      authorProfiles,
+      reports,
+      blocks,
     };
 
     void AsyncStorage.setItem(COMMUNITY_STORAGE_KEY, JSON.stringify(payload));
-  }, [hasLoaded, state]);
+  }, [authorProfiles, blocks, boards, hasLoaded, reports, state]);
 
-  const getAuthorProfile = (authorProfileId: string): Profile | undefined => {
-    if (authorProfileId === profile.id) {
-      return profile;
+  useEffect(() => {
+    if (!hasLoaded) {
+      return;
     }
 
-    return getMockProfileById(authorProfileId);
-  };
+    setAuthorProfiles((current) =>
+      buildPersistedAuthorProfiles({
+        currentProfileSummary,
+        existingProfiles: current,
+      })
+    );
+  }, [currentProfileSummary, hasLoaded]);
+
+  const findBoardById = (boardId?: string) => boards.find((board) => board.id === boardId);
+  const getNetworkBoard = () => boards.find((board) => board.scopeType === 'network');
+  const getMajorBoards = () => boards.filter((board) => board.scopeType === 'major_group');
+  const getMajorBoardByMajorGroupId = (majorGroupId?: string) =>
+    boards.find(
+      (board) => board.scopeType === 'major_group' && board.majorGroupId === majorGroupId
+    );
+  const getSchoolBoardByUniversityId = (universityId?: string) =>
+    boards.find(
+      (board) => board.scopeType === 'university' && board.universityId === universityId
+    );
+  const blockedProfileIds = buildBlockedProfileIds({
+    blocks,
+    blockerProfileId: profile.id,
+  });
+
+  const getAuthorProfile = (authorProfileId: string) =>
+    authorProfileId === profile.id
+      ? currentProfileSummary
+      : authorProfiles.find((item) => item.id === authorProfileId) ??
+        FALLBACK_AUTHOR_PROFILE_MAP.get(authorProfileId);
+
+  const getBlockedProfiles = () =>
+    buildBlockedProfileEntries({
+      blocks,
+      blockerProfileId: profile.id,
+      resolveProfile: getAuthorProfile,
+    });
+
+  const isBlockedProfile = (profileId?: string) =>
+    Boolean(profileId && blockedProfileIds.has(profileId));
 
   const mapPostRowToView = (post: PostRow): CommunityPost => {
     const author = getAuthorProfile(post.authorProfileId);
@@ -434,10 +947,12 @@ export function CommunityProvider({ children }: PropsWithChildren) {
   };
 
   const getPostRowById = (postId?: string) => state.posts.find((post) => post.id === postId);
+  const getRecruitmentRowById = (recruitmentId?: string) =>
+    state.recruitments.find((recruitment) => recruitment.id === recruitmentId);
 
   const getReadAccessForBoard = (boardId?: string) =>
     getBoardReadAccess({
-      board: getBoardById(boardId),
+      board: findBoardById(boardId),
       canAccessCommunity,
       isAuthenticated,
       primaryUniversityId: profile.primaryUniversityId,
@@ -450,12 +965,26 @@ export function CommunityProvider({ children }: PropsWithChildren) {
       return { ok: false, message: '게시글을 찾을 수 없습니다.' };
     }
 
+    if (blockedProfileIds.has(post.authorProfileId)) {
+      return { ok: false, message: '차단한 사용자의 글이라 숨겨졌습니다.' };
+    }
+
     return getReadAccessForBoard(post.boardId);
+  };
+
+  const getReadAccessForRecruitment = (recruitmentId?: string) => {
+    const recruitment = getRecruitmentRowById(recruitmentId);
+
+    if (!recruitment) {
+      return { ok: false, message: '모집글을 찾을 수 없습니다.' };
+    }
+
+    return getReadAccessForPost(recruitment.postId);
   };
 
   const getWriteAccessForBoard = (boardId?: string) =>
     getBoardWriteAccess({
-      board: getBoardById(boardId),
+      board: findBoardById(boardId),
       canAccessCommunity,
       isAuthenticated,
       isReadOnly,
@@ -469,7 +998,45 @@ export function CommunityProvider({ children }: PropsWithChildren) {
       return { ok: false, message: '게시글을 찾을 수 없습니다.' };
     }
 
-    return getWriteAccessForBoard(post.boardId);
+    const writeAccess = getWriteAccessForBoard(post.boardId);
+
+    if (!writeAccess.ok) {
+      return writeAccess;
+    }
+
+    if (post.postType === 'recruitment') {
+      const recruitment = state.recruitments.find((item) => item.postId === post.id);
+
+      if (!recruitment) {
+        return { ok: false, message: '모집 정보를 다시 확인해 주세요.' };
+      }
+
+      if (recruitment.status !== 'open') {
+        return {
+          ok: false,
+          message: getRecruitmentClosedMessage(recruitment.status),
+        };
+      }
+    }
+
+    return writeAccess;
+  };
+
+  const mapRecruitmentRowToView = (recruitment: RecruitmentRow): RecruitmentCard | undefined => {
+    const post = getPostRowById(recruitment.postId);
+
+    if (!post || !getReadAccessForPost(post.id).ok) {
+      return undefined;
+    }
+
+    return {
+      ...recruitment,
+      title: post.title,
+      summary: buildSummary(post.body),
+      headcountLabel: buildHeadcountLabel(recruitment.headcount),
+      deadlineLabel: buildDeadlineLabel(recruitment.deadlineAt),
+      commentPrompt: RECRUITMENT_COMMENT_PROMPTS[recruitment.recruitmentType],
+    };
   };
 
   const getPostsByBoardId = (boardId?: string) => {
@@ -478,7 +1045,12 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     }
 
     return sortPostsDescending(
-      state.posts.filter((post) => post.boardId === boardId && post.status === 'published')
+      state.posts.filter(
+        (post) =>
+          post.boardId === boardId &&
+          post.status === 'published' &&
+          !blockedProfileIds.has(post.authorProfileId)
+      )
     ).map(mapPostRowToView);
   };
 
@@ -498,8 +1070,40 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     }
 
     return sortCommentsAscending(
-      state.comments.filter((comment) => comment.postId === postId && comment.status === 'published')
+      state.comments.filter(
+        (comment) =>
+          comment.postId === postId &&
+          comment.status === 'published' &&
+          !blockedProfileIds.has(comment.authorProfileId)
+      )
     ).map(mapCommentRowToView);
+  };
+
+  const getRecruitments = (majorGroupId?: string) =>
+    sortRecruitmentsDescending(
+      state.recruitments.filter((recruitment) => {
+        if (!getReadAccessForRecruitment(recruitment.id).ok) {
+          return false;
+        }
+
+        if (!majorGroupId || majorGroupId === 'all') {
+          return true;
+        }
+
+        return recruitment.preferredMajorGroupId === majorGroupId;
+      })
+    )
+      .map(mapRecruitmentRowToView)
+      .filter((item): item is RecruitmentCard => Boolean(item));
+
+  const getRecruitmentById = (recruitmentId?: string) => {
+    if (!getReadAccessForRecruitment(recruitmentId).ok) {
+      return undefined;
+    }
+
+    const recruitment = getRecruitmentRowById(recruitmentId);
+
+    return recruitment ? mapRecruitmentRowToView(recruitment) : undefined;
   };
 
   const createPost = async ({
@@ -509,7 +1113,7 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     category,
     postType,
   }: CreatePostInput): Promise<CommunityActionResult> => {
-    const board = getBoardById(boardId);
+    const board = findBoardById(boardId);
     const writeAccess = getWriteAccessForBoard(boardId);
     const trimmedTitle = title.trim();
     const trimmedBody = body.trim();
@@ -536,6 +1140,52 @@ export function CommunityProvider({ children }: PropsWithChildren) {
       };
     }
 
+    if (isSupabaseReady && canAccessCommunity) {
+      const remoteResult = await insertPost({
+        boardId: board.id,
+        authorProfileId: profile.id,
+        title: trimmedTitle,
+        body: trimmedBody,
+        category,
+        postType,
+        majorGroupId:
+          board.scopeType === 'major_group' ? board.majorGroupId : profile.primaryMajorGroupId,
+        universityId:
+          board.scopeType === 'university'
+            ? board.universityId ?? profile.primaryUniversityId
+            : undefined,
+        isAnonymous: true,
+        commentCount: 0,
+      });
+
+      if (!remoteResult.ok || !remoteResult.post) {
+        return {
+          ok: false,
+          message: remoteResult.error ?? '게시글을 저장하지 못했습니다.',
+        };
+      }
+      const remotePost = remoteResult.post;
+
+      setState((current) => ({
+        ...current,
+        posts: prependOrReplaceRow<PostRow>(current.posts, remotePost),
+      }));
+      track('post_created', {
+        board_scope: board.scopeType,
+        post_category: category,
+        post_type: postType,
+        university_id: remotePost.universityId ?? null,
+        major_group: remotePost.majorGroupId ?? null,
+        storage_mode: 'supabase',
+      });
+
+      return {
+        ok: true,
+        message: '게시글이 등록되었습니다.',
+        postId: remotePost.id,
+      };
+    }
+
     const createdAt = new Date().toISOString();
     const nextPost: PostRow = {
       id: createPostId(),
@@ -559,11 +1209,178 @@ export function CommunityProvider({ children }: PropsWithChildren) {
       ...current,
       posts: [nextPost, ...current.posts],
     }));
+    track('post_created', {
+      board_scope: board.scopeType,
+      post_category: category,
+      post_type: postType,
+      university_id: nextPost.universityId ?? null,
+      major_group: nextPost.majorGroupId ?? null,
+      storage_mode: 'local_cache',
+    });
 
     return {
       ok: true,
-      message: '게시글이 등록되었습니다.',
+      message: getLocalFallbackWriteMessage('게시글'),
       postId: nextPost.id,
+    };
+  };
+
+  const createRecruitment = async ({
+    boardId,
+    title,
+    body,
+    recruitmentType,
+    mode,
+    headcount,
+    deadlineDays,
+    preferredMajorGroupId,
+  }: CreateRecruitmentInput): Promise<CommunityActionResult> => {
+    const board = findBoardById(boardId);
+    const writeAccess = getWriteAccessForBoard(boardId);
+    const trimmedTitle = title.trim();
+    const trimmedBody = body.trim();
+    const parsedHeadcount = Number.parseInt(headcount, 10);
+
+    if (!writeAccess.ok) {
+      return writeAccess;
+    }
+
+    if (!board) {
+      return { ok: false, message: '모집 위치를 다시 선택해 주세요.' };
+    }
+
+    if (trimmedTitle.length < COMMUNITY_VALIDATION.titleMinLength) {
+      return {
+        ok: false,
+        message: `제목은 ${COMMUNITY_VALIDATION.titleMinLength}자 이상 입력해 주세요.`,
+      };
+    }
+
+    if (trimmedBody.length < COMMUNITY_VALIDATION.bodyMinLength) {
+      return {
+        ok: false,
+        message: `본문은 ${COMMUNITY_VALIDATION.bodyMinLength}자 이상 입력해 주세요.`,
+      };
+    }
+
+    if (
+      Number.isNaN(parsedHeadcount) ||
+      parsedHeadcount < COMMUNITY_VALIDATION.recruitmentHeadcountMin ||
+      parsedHeadcount > COMMUNITY_VALIDATION.recruitmentHeadcountMax
+    ) {
+      return {
+        ok: false,
+        message: `${COMMUNITY_VALIDATION.recruitmentHeadcountMin}명 이상 ${COMMUNITY_VALIDATION.recruitmentHeadcountMax}명 이하로 모집 인원을 입력해 주세요.`,
+      };
+    }
+
+    const normalizedPreferredMajorGroupId = preferredMajorGroupId?.trim() || undefined;
+    const effectiveMajorGroupId =
+      board.scopeType === 'major_group' ? board.majorGroupId : normalizedPreferredMajorGroupId;
+
+    if (isSupabaseReady && canAccessCommunity) {
+      const remoteResult = await createRecruitmentWithPost({
+        boardId: board.id,
+        title: trimmedTitle,
+        body: trimmedBody,
+        majorGroupId:
+          board.scopeType === 'major_group' ? board.majorGroupId : profile.primaryMajorGroupId,
+        universityId:
+          board.scopeType === 'university'
+            ? board.universityId ?? profile.primaryUniversityId
+            : undefined,
+        isAnonymous: true,
+        recruitmentType,
+        headcount: parsedHeadcount,
+        mode,
+        deadlineAt: buildDeadlineAt(deadlineDays),
+        preferredMajorGroupId: effectiveMajorGroupId,
+      });
+
+      if (!remoteResult.ok || !remoteResult.recruitment || !remoteResult.postId || !remoteResult.post) {
+        return {
+          ok: false,
+          message: remoteResult.error ?? '모집글을 저장하지 못했습니다.',
+        };
+      }
+      const remotePost = remoteResult.post;
+      const remoteRecruitment = remoteResult.recruitment;
+
+      setState((current) => ({
+        ...current,
+        posts: prependOrReplaceRow<PostRow>(current.posts, remotePost),
+        recruitments: prependOrReplaceRow<RecruitmentRow>(
+          current.recruitments,
+          remoteRecruitment
+        ),
+      }));
+      track('recruitment_created', {
+        board_scope: board.scopeType,
+        university_id: remotePost.universityId ?? null,
+        major_group: remoteRecruitment.preferredMajorGroupId ?? remotePost.majorGroupId ?? null,
+        recruitment_type: recruitmentType,
+        storage_mode: 'supabase',
+      });
+
+      return {
+        ok: true,
+        message: '모집글이 등록되었습니다.',
+        postId: remoteResult.postId,
+        recruitmentId: remoteRecruitment.id,
+      };
+    }
+
+    const createdAt = new Date().toISOString();
+    const recruitmentId = createRecruitmentId();
+    const postId = createPostId();
+    const nextPost: PostRow = {
+      id: postId,
+      boardId: board.id,
+      authorProfileId: profile.id,
+      title: trimmedTitle,
+      body: trimmedBody,
+      category: 'recruitment',
+      postType: 'recruitment',
+      status: 'published',
+      majorGroupId:
+        board.scopeType === 'major_group' ? board.majorGroupId : profile.primaryMajorGroupId,
+      universityId:
+        board.scopeType === 'university' ? board.universityId ?? profile.primaryUniversityId : undefined,
+      recruitmentId,
+      isAnonymous: true,
+      commentCount: 0,
+      createdAt,
+    };
+    const nextRecruitment: RecruitmentRow = {
+      id: recruitmentId,
+      postId,
+      recruitmentType,
+      status: 'open',
+      headcount: parsedHeadcount,
+      mode,
+      deadlineAt: buildDeadlineAt(deadlineDays),
+      preferredMajorGroupId: effectiveMajorGroupId,
+      createdAt,
+    };
+
+    setState((current) => ({
+      ...current,
+      posts: [nextPost, ...current.posts],
+      recruitments: [nextRecruitment, ...current.recruitments],
+    }));
+    track('recruitment_created', {
+      board_scope: board.scopeType,
+      university_id: nextPost.universityId ?? null,
+      major_group: nextRecruitment.preferredMajorGroupId ?? nextPost.majorGroupId ?? null,
+      recruitment_type: recruitmentType,
+      storage_mode: 'local_cache',
+    });
+
+    return {
+      ok: true,
+      message: getLocalFallbackWriteMessage('모집글'),
+      postId,
+      recruitmentId,
     };
   };
 
@@ -590,6 +1407,53 @@ export function CommunityProvider({ children }: PropsWithChildren) {
       };
     }
 
+    if (isSupabaseReady && canAccessCommunity) {
+      const remoteResult = await insertComment({
+        postId: post.id,
+        authorProfileId: profile.id,
+        body: trimmedBody,
+        kind: post.postType === 'recruitment' ? 'recruitment_intent' : 'general',
+        isAnonymous: true,
+      });
+
+      if (!remoteResult.ok || !remoteResult.comment) {
+        return {
+          ok: false,
+          message: remoteResult.error ?? '댓글을 저장하지 못했습니다.',
+        };
+      }
+      const remoteComment = remoteResult.comment;
+
+      setState((current) => ({
+        posts: current.posts.map((item) =>
+          item.id === post.id
+            ? {
+                ...item,
+                commentCount: item.commentCount + 1,
+              }
+            : item
+        ),
+        comments: prependOrReplaceRow<CommentRow>(current.comments, remoteComment),
+        recruitments: current.recruitments,
+      }));
+      track(
+        post.postType === 'recruitment' ? 'recruitment_interest_commented' : 'comment_created',
+        {
+          post_type: post.postType,
+          board_scope: findBoardById(post.boardId)?.scopeType ?? null,
+          university_id: post.universityId ?? null,
+          major_group: post.majorGroupId ?? null,
+          storage_mode: 'supabase',
+        }
+      );
+
+      return {
+        ok: true,
+        message: '댓글이 등록되었습니다.',
+        commentId: remoteComment.id,
+      };
+    }
+
     const createdAt = new Date().toISOString();
     const nextComment: CommentRow = {
       id: createCommentId(),
@@ -613,12 +1477,258 @@ export function CommunityProvider({ children }: PropsWithChildren) {
           : item
       ),
       comments: [...current.comments, nextComment],
+      recruitments: current.recruitments.map((recruitment) =>
+        recruitment.postId === post.id && recruitment.status === 'open'
+          ? {
+              ...recruitment,
+            }
+          : recruitment
+      ),
     }));
+    track(
+      post.postType === 'recruitment' ? 'recruitment_interest_commented' : 'comment_created',
+      {
+        post_type: post.postType,
+        board_scope: findBoardById(post.boardId)?.scopeType ?? null,
+        university_id: post.universityId ?? null,
+        major_group: post.majorGroupId ?? null,
+        storage_mode: 'local_cache',
+      }
+    );
 
     return {
       ok: true,
-      message: '댓글이 등록되었습니다.',
+      message: getLocalFallbackWriteMessage('댓글'),
       commentId: nextComment.id,
+    };
+  };
+
+  const reportTarget = async ({
+    targetType,
+    targetId,
+    reason,
+    targetProfileId,
+  }: ReportTargetInput): Promise<CommunityActionResult> => {
+    const normalizedReason = REPORT_REASON_OPTIONS.find((option) => option.value === reason)?.value;
+    let resolvedTargetProfileId = targetProfileId;
+
+    if (!normalizedReason) {
+      return { ok: false, message: '신고 사유를 다시 선택해 주세요.' };
+    }
+
+    if (!targetId.trim()) {
+      return { ok: false, message: '신고 대상을 다시 확인해 주세요.' };
+    }
+
+    if (targetType === 'post') {
+      const post = getPostRowById(targetId);
+
+      if (!post) {
+        return { ok: false, message: '신고할 게시글을 찾을 수 없습니다.' };
+      }
+
+      resolvedTargetProfileId = post.authorProfileId;
+    }
+
+    if (targetType === 'comment') {
+      const comment = state.comments.find((item) => item.id === targetId);
+
+      if (!comment) {
+        return { ok: false, message: '신고할 댓글을 찾을 수 없습니다.' };
+      }
+
+      resolvedTargetProfileId = comment.authorProfileId;
+    }
+
+    if (targetType === 'recruitment') {
+      const recruitment = state.recruitments.find((item) => item.id === targetId);
+
+      if (!recruitment) {
+        return { ok: false, message: '신고할 모집글을 찾을 수 없습니다.' };
+      }
+
+      const recruitmentPost = getPostRowById(recruitment.postId);
+      resolvedTargetProfileId = recruitmentPost?.authorProfileId;
+    }
+
+    if (targetType === 'profile') {
+      resolvedTargetProfileId = targetProfileId ?? targetId;
+    }
+
+    if (!resolvedTargetProfileId) {
+      return { ok: false, message: '신고할 작성자 정보를 다시 확인해 주세요.' };
+    }
+
+    if (resolvedTargetProfileId === profile.id) {
+      return { ok: false, message: '내 글, 내 댓글, 내 모집글, 내 프로필은 신고할 수 없습니다.' };
+    }
+
+    if (
+      isSupabaseReady &&
+      canAccessCommunity &&
+      isUuidLike(targetId) &&
+      isUuidLike(resolvedTargetProfileId)
+    ) {
+      const remoteResult = await submitReport({
+        targetType,
+        targetId,
+        reason: normalizedReason,
+        targetProfileId: resolvedTargetProfileId,
+      });
+
+      if (remoteResult.ok && remoteResult.report) {
+        setReports((current) => prependReportRecord(current, remoteResult.report!));
+        track('report_submitted', {
+          target_type: targetType,
+          reason: normalizedReason,
+          storage_mode: 'supabase',
+        });
+
+        return {
+          ok: true,
+          message: '신고가 접수되었습니다.',
+          reportId: remoteResult.report.id,
+        };
+      }
+
+      if (remoteResult.errorKind !== 'network') {
+        return {
+          ok: false,
+          message: remoteResult.error ?? '신고를 접수하지 못했습니다.',
+        };
+      }
+    }
+
+    const nextReport: ReportRecord = {
+      id: createReportId(),
+      reporterProfileId: profile.id,
+      targetType,
+      targetId,
+      targetProfileId: resolvedTargetProfileId,
+      reason: normalizedReason,
+      createdAt: new Date().toISOString(),
+    };
+
+    setReports((current) => prependReportRecord(current, nextReport));
+    track('report_submitted', {
+      target_type: targetType,
+      reason: normalizedReason,
+      storage_mode: 'local_cache',
+    });
+
+    return {
+      ok: true,
+      message: getLocalModerationMessage('신고'),
+      reportId: nextReport.id,
+    };
+  };
+
+  const blockProfile = async (profileId?: string): Promise<CommunityActionResult> => {
+    if (!profileId) {
+      return { ok: false, message: '차단할 작성자 정보를 찾을 수 없습니다.' };
+    }
+
+    if (profileId === profile.id) {
+      return { ok: false, message: '자기 자신은 차단할 수 없습니다.' };
+    }
+
+    if (blockedProfileIds.has(profileId)) {
+      return { ok: true, message: '이미 차단한 사용자입니다.' };
+    }
+
+    if (isSupabaseReady && canAccessCommunity && isUuidLike(profileId)) {
+      const remoteResult = await blockProfileRemote(profileId);
+
+      if (remoteResult.ok && remoteResult.block) {
+        setBlocks((current) => prependBlockRecord(current, remoteResult.block!));
+        track('user_blocked', {
+          storage_mode: 'supabase',
+        });
+
+        return {
+          ok: true,
+          message: '사용자를 차단했습니다.',
+          blockId: remoteResult.block.id,
+        };
+      }
+
+      if (remoteResult.errorKind !== 'network') {
+        return {
+          ok: false,
+          message: remoteResult.error ?? '사용자를 차단하지 못했습니다.',
+        };
+      }
+    }
+
+    const nextBlock: BlockRecord = {
+      id: createBlockId(),
+      blockerProfileId: profile.id,
+      blockedProfileId: profileId,
+      createdAt: new Date().toISOString(),
+    };
+
+    setBlocks((current) => prependBlockRecord(current, nextBlock));
+    track('user_blocked', {
+      storage_mode: 'local_cache',
+    });
+
+    return {
+      ok: true,
+      message: getLocalModerationMessage('차단'),
+      blockId: nextBlock.id,
+    };
+  };
+
+  const unblockProfile = async (profileId?: string): Promise<CommunityActionResult> => {
+    if (!profileId) {
+      return { ok: false, message: '차단 해제할 작성자 정보를 찾을 수 없습니다.' };
+    }
+
+    if (!blockedProfileIds.has(profileId)) {
+      return { ok: true, message: '현재 차단 목록에 없는 사용자입니다.' };
+    }
+
+    if (isSupabaseReady && canAccessCommunity && isUuidLike(profileId)) {
+      const remoteResult = await unblockProfileRemote(profileId);
+
+      if (remoteResult.ok) {
+        setBlocks((current) =>
+          current.filter(
+            (block) =>
+              !(block.blockerProfileId === profile.id && block.blockedProfileId === profileId)
+          )
+        );
+        track('user_unblocked', {
+          storage_mode: 'supabase',
+        });
+
+        return {
+          ok: true,
+          message: '차단을 해제했습니다.',
+        };
+      }
+
+      if (remoteResult.errorKind !== 'network') {
+        return {
+          ok: false,
+          message: remoteResult.error ?? '차단을 해제하지 못했습니다.',
+        };
+      }
+    }
+
+    setBlocks((current) =>
+      current.filter(
+        (block) =>
+          !(block.blockerProfileId === profile.id && block.blockedProfileId === profileId)
+      )
+    );
+    track('user_unblocked', {
+      storage_mode: 'local_cache',
+    });
+
+    return {
+      ok: true,
+      message: getLocalModerationMessage('차단 해제'),
     };
   };
 
@@ -626,15 +1736,29 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     <CommunityContext.Provider
       value={{
         isHydrating,
+        getBoardById: findBoardById,
+        getNetworkBoard,
+        getMajorBoards,
+        getMajorBoardByMajorGroupId,
+        getSchoolBoardByUniversityId,
         getPostById,
         getPostsByBoardId,
         getCommentsByPostId,
+        getRecruitments,
+        getRecruitmentById,
         getReadAccessForBoard,
         getReadAccessForPost,
+        getReadAccessForRecruitment,
         getWriteAccessForBoard,
         getCommentAccessForPost,
+        getBlockedProfiles,
+        isBlockedProfile,
         createPost,
+        createRecruitment,
         createComment,
+        reportTarget,
+        blockProfile,
+        unblockProfile,
       }}>
       {children}
     </CommunityContext.Provider>

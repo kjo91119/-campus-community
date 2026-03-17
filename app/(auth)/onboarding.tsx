@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -7,15 +7,20 @@ import {
 } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 
-import { MAJOR_GROUPS } from '@/constants/major-groups';
-import { MOCK_UNIVERSITIES, getUniversityById } from '@/data/mock-community';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAnalytics } from '@/hooks/use-analytics';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import {
+  SUPPORTED_MAJOR_GROUPS,
+  SUPPORTED_UNIVERSITIES,
+  getUniversityById,
+} from '@/lib/community/metadata';
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { track } = useAnalytics();
   const {
     authEmail,
     completeOnboarding,
@@ -34,6 +39,25 @@ export default function OnboardingScreen() {
   const borderColor = useThemeColor({}, 'icon');
   const textColor = useThemeColor({}, 'text');
   const selectedUniversity = getUniversityById(universityId || profile.primaryUniversityId);
+  const hasTrackedStartRef = useRef(false);
+
+  useEffect(() => {
+    if (isHydrating || profile.verificationStatus !== 'verified' || hasTrackedStartRef.current) {
+      return;
+    }
+
+    track('onboarding_started', {
+      university_id: profile.primaryUniversityId ?? null,
+      major_group: profile.primaryMajorGroupId ?? null,
+    });
+    hasTrackedStartRef.current = true;
+  }, [
+    isHydrating,
+    profile.primaryMajorGroupId,
+    profile.primaryUniversityId,
+    profile.verificationStatus,
+    track,
+  ]);
 
   if (isHydrating) {
     return null;
@@ -108,7 +132,7 @@ export default function OnboardingScreen() {
         <ThemedText>
           MVP에서는 학교 이메일로 확인된 학교와 동일한 학교를 프로필 학교로 사용합니다.
         </ThemedText>
-        {MOCK_UNIVERSITIES.map((item) => {
+        {SUPPORTED_UNIVERSITIES.map((item) => {
           const selected = universityId === item.id;
 
           return (
@@ -128,7 +152,7 @@ export default function OnboardingScreen() {
 
       <ThemedView style={styles.card}>
         <ThemedText type="subtitle">전공군 선택</ThemedText>
-        {MAJOR_GROUPS.map((group) => {
+        {SUPPORTED_MAJOR_GROUPS.map((group) => {
           const selected = majorGroupId === group.id;
 
           return (

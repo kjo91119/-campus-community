@@ -8,4 +8,7 @@ export const SUPABASE_TABLES = {
   posts: 'posts',
   comments: 'comments',
   recruitments: 'recruitments',
+  reports: 'reports',
+  blocks: 'blocks',
+  moderationEvents: 'moderation_events',
 } as const;

@@ -23,8 +23,8 @@
 | `comments` | `CommentRow`, `Comment`, `MOCK_COMMENTS` | 정렬됨 | `comment_kind` 방향을 반영해 일반 댓글과 모집 참여 의사 댓글을 구분 |
 | `recruitments` | `RecruitmentRow`, `RecruitmentCard`, `MOCK_RECRUITMENTS` | 정렬됨 | row와 카드용 표시 필드를 분리해도 `post_id` 중심 구조 유지 |
 | `reactions` | 없음 | 의도적 제외 | MVP 이후 검토 |
-| `reports` | 없음 | 의도적 제외 | 운영 정책은 문서에만 있고 앱 UI/테이블 연결은 아직 미룸 |
-| `blocks` | 없음 | 의도적 제외 | MVP 후반 또는 V1 검토 |
+| `reports` | `ReportRecord`, `use-community-data.tsx`, `supabase/sql/06_add_reports_blocks_rpcs.sql` | 진행 중 | 로컬 UI와 RPC 초안은 연결됐고, 운영 검토 흐름은 `moderation_events`와 함께 확장 중 |
+| `blocks` | `BlockRecord`, `use-community-data.tsx`, `supabase/sql/06_add_reports_blocks_rpcs.sql` | 진행 중 | 차단 필터와 차단 목록은 앱에 연결됐고, RPC 기반 원격 저장을 사용한다 |
 | `notifications` | 없음 | 의도적 제외 | MVP 밖 |
 
 ## 지금 단계에서 고정한 앱 레벨 규칙
@@ -76,6 +76,31 @@
 - 세션 저장은 공식 quickstart처럼 `expo-sqlite` 기반으로 시작하거나, auth 중심 가이드처럼 `@react-native-async-storage/async-storage`를 쓰는 방식 중 하나를 고르면 된다.
 - 민감도 요구가 높거나 소셜 로그인까지 고려하면 이후 `expo-secure-store` 조합을 검토한다.
 
+## fresh DB 부트스트랩 순서
+
+migration 기준:
+
+1. `supabase/migrations/20260316120000_create_profiles.sql`
+2. `supabase/migrations/20260316130000_create_verifications.sql`
+3. `supabase/migrations/20260316153000_create_community_tables.sql`
+4. `supabase/migrations/20260316170000_secure_profiles_and_auth_rpcs.sql`
+5. `supabase/migrations/20260316180000_add_profile_summary_rpc.sql`
+6. `supabase/migrations/20260316190000_add_reports_blocks_rpcs.sql`
+7. `supabase/migrations/20260316191000_add_moderation_actions.sql`
+
+로컬 SQL editor 기준:
+
+1. `supabase/sql/03_create_verifications.sql`
+2. `supabase/sql/04_secure_profiles_and_auth_rpcs.sql`
+3. `supabase/sql/05_add_profile_summary_rpc.sql`
+4. `supabase/sql/06_add_reports_blocks_rpcs.sql`
+5. `supabase/sql/07_add_moderation_actions.sql`
+
+메모:
+
+- `03_create_verifications.sql`은 단독 해석용이 아니라 `04_secure_profiles_and_auth_rpcs.sql`과 순서대로 함께 적용하는 전제다.
+- fresh DB에서는 `profiles` 생성 이후 `verifications`를 먼저 만들고, 그 다음에 권한/RPC hardening을 올리는 순서가 맞다.
+
 ## 클라이언트 초기화 파일 구조 제안
 
 권장 구조:
@@ -110,12 +135,15 @@
 
 ## 지금 당장 연결하지 않을 기능
 
-- 신고, 차단, 알림
 - 좋아요/공감 반응
 - 저장, 내가 쓴 글, 활동 요약
 - 관리자용 검토 UI
 - 실시간 채팅
 - 학교별 다중 보드 세분화
+
+메모:
+
+- 신고/차단 자체는 더 이상 완전 제외가 아니다. 현재는 `reports`, `blocks`, `moderation_events` SQL과 앱 UI/RPC 골격까지 들어갔고, 다음 단계는 운영자용 검토 도구와 실제 운영 절차를 붙이는 일이다.
 
 ## 현재 코드에서 실제 연결 직전까지 허용하는 최소 준비
 

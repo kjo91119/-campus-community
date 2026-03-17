@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -5,23 +6,36 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import {
-  getSchoolBoardByUniversityId,
-  getUniversityById,
-} from '@/data/mock-community';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAnalytics } from '@/hooks/use-analytics';
 import { useCommunityData } from '@/hooks/use-community-data';
 import { useAppSession } from '@/hooks/use-app-session';
+import { getUniversityById } from '@/lib/community/metadata';
 
 export default function SchoolScreen() {
   const router = useRouter();
+  const { track } = useAnalytics();
   const { profile, isReadOnly } = useAppSession();
-  const { getPostsByBoardId, getWriteAccessForBoard, isHydrating } = useCommunityData();
+  const { getPostsByBoardId, getSchoolBoardByUniversityId, getWriteAccessForBoard, isHydrating } =
+    useCommunityData();
   const university = getUniversityById(profile.primaryUniversityId);
   const schoolBoard = getSchoolBoardByUniversityId(profile.primaryUniversityId);
   const schoolPosts = getPostsByBoardId(schoolBoard?.id);
   const writeAccess = getWriteAccessForBoard(schoolBoard?.id);
+  const hasTrackedViewRef = useRef(false);
+
+  useEffect(() => {
+    if (isHydrating || hasTrackedViewRef.current) {
+      return;
+    }
+
+    track('school_board_viewed', {
+      university_id: profile.primaryUniversityId ?? null,
+      board_scope: schoolBoard?.scopeType ?? 'university',
+    });
+    hasTrackedViewRef.current = true;
+  }, [isHydrating, profile.primaryUniversityId, schoolBoard?.scopeType, track]);
 
   if (isHydrating) {
     return null;
@@ -79,7 +93,13 @@ export default function SchoolScreen() {
             <Pressable
               key={post.id}
               style={styles.listItem}
-              onPress={() => router.push(`/(tabs)/posts/${post.id}` as never)}>
+              onPress={() =>
+                router.push(
+                  post.recruitmentId
+                    ? (`/(tabs)/recruitments/${post.recruitmentId}` as never)
+                    : (`/(tabs)/posts/${post.id}` as never)
+                )
+              }>
               <ThemedText type="defaultSemiBold">{post.title}</ThemedText>
               <ThemedText>{post.summary}</ThemedText>
               <ThemedText>

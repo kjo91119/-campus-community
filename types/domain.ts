@@ -12,6 +12,8 @@ export type VerificationMethod = 'email' | 'student_id_manual';
 
 export type VerificationReviewStatus = 'pending' | 'approved' | 'rejected';
 
+export type VerificationSyncState = 'synced' | 'retry_required';
+
 export type BoardScopeType = 'network' | 'major_group' | 'university';
 
 export type BoardVisibility = 'verified_all' | 'verified_same_university';
@@ -31,6 +33,36 @@ export type RecruitmentType = 'study' | 'assignment' | 'contest' | 'project';
 export type RecruitmentStatus = 'open' | 'closed' | 'completed';
 
 export type RecruitmentMode = 'online' | 'offline' | 'hybrid';
+
+export type ReportTargetType = 'post' | 'comment' | 'recruitment' | 'profile';
+
+export type ReportReason =
+  | 'abuse'
+  | 'hate'
+  | 'sexual'
+  | 'spam'
+  | 'misinformation'
+  | 'impersonation'
+  | 'scam';
+
+export type ReportStatus = 'open' | 'reviewing' | 'resolved' | 'dismissed';
+
+export type ModerationTargetType =
+  | 'profile'
+  | 'post'
+  | 'comment'
+  | 'recruitment'
+  | 'report';
+
+export type ModerationActionType =
+  | 'report_reviewing'
+  | 'report_resolved'
+  | 'report_dismissed'
+  | 'content_hidden'
+  | 'content_restored'
+  | 'user_restricted'
+  | 'user_banned'
+  | 'user_restored';
 
 export interface University {
   id: EntityId;
@@ -90,6 +122,8 @@ export interface Profile {
 
 export type ProfileStorageMode = 'supabase' | 'local_cache' | 'auth_seed';
 
+export type VerificationStorageMode = 'supabase' | 'local_cache' | 'local_retry' | 'auth_seed';
+
 export interface ProfileSummary {
   id: EntityId;
   nickname: string;
@@ -113,6 +147,7 @@ export interface VerificationRow {
 
 export interface VerificationView {
   submittedLabel?: string;
+  syncState?: VerificationSyncState;
 }
 
 export type VerificationRecord = VerificationRow & VerificationView;
@@ -187,6 +222,48 @@ export interface RecruitmentView {
 export type Recruitment = RecruitmentRow & RecruitmentView;
 
 export type RecruitmentCard = Recruitment;
+
+export interface ReportRecord {
+  id: EntityId;
+  reporterProfileId: EntityId;
+  targetType: ReportTargetType;
+  targetId: EntityId;
+  targetProfileId?: EntityId;
+  reason: ReportReason;
+  detail?: string;
+  status?: ReportStatus;
+  reviewerProfileId?: EntityId;
+  reviewedAt?: IsoDateString;
+  createdAt: IsoDateString;
+}
+
+export interface BlockRecord {
+  id: EntityId;
+  blockerProfileId: EntityId;
+  blockedProfileId: EntityId;
+  createdAt: IsoDateString;
+}
+
+export interface BlockedProfileEntry {
+  profileId: EntityId;
+  profile?: ProfileSummary;
+  displayName: string;
+  primaryUniversityId?: EntityId;
+  primaryMajorGroupId?: EntityId;
+  blockedAt: IsoDateString;
+}
+
+export interface ModerationEvent {
+  id: EntityId;
+  actorProfileId?: EntityId;
+  targetType: ModerationTargetType;
+  targetId: EntityId;
+  actionType: ModerationActionType;
+  targetProfileId?: EntityId;
+  reportId?: EntityId;
+  note?: string;
+  createdAt: IsoDateString;
+}
 
 export interface AppSessionScenario {
   id: string;

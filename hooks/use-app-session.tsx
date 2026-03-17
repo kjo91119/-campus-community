@@ -3,23 +3,30 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
 import type { User } from '@supabase/supabase-js';
 
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
+import { useAnalytics } from '@/hooks/use-analytics';
 import {
   findUniversityByEmail,
   getMajorGroupById,
   getUniversityById,
-} from '@/data/mock-community';
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
-import { getProfileById, upsertProfile } from '@/lib/supabase/profiles';
+} from '@/lib/community/metadata';
+import { completeOnboardingProfile, getProfileById } from '@/lib/supabase/profiles';
+import {
+  getLatestVerificationByProfileId,
+  submitManualVerificationRequest,
+} from '@/lib/supabase/verifications';
 import type {
   AccountStatus,
   Profile,
   ProfileStorageMode,
   VerificationRecord,
+  VerificationStorageMode,
   VerificationStatus,
 } from '@/types/domain';
 
@@ -36,6 +43,12 @@ type ActionResult = {
   message?: string;
 };
 
+type SubmitManualVerificationInput = {
+  universityId: string;
+  acceptedMaskingGuide: boolean;
+  acceptedEvidenceChecklist: boolean;
+};
+
 type AppSessionContextValue = {
   profile: Profile;
   verificationRecord?: VerificationRecord;
@@ -49,7 +62,10 @@ type AppSessionContextValue = {
   authEmail?: string;
   profileStorageMode: ProfileStorageMode;
   profileSyncMessage?: string;
+  verificationStorageMode: VerificationStorageMode;
+  verificationSyncMessage?: string;
   completeOnboarding: (input: CompleteOnboardingInput) => Promise<ActionResult>;
+  submitManualVerification: (input: SubmitManualVerificationInput) => Promise<ActionResult>;
   setAccountStatus: (status: AccountStatus) => void;
   resetDemo: () => void;
 };
@@ -68,6 +84,10 @@ const AppSessionContext = createContext<AppSessionContextValue | null>(null);
 
 function getLocalProfileStorageKey(userId: string) {
   return `campus-community:profile:${userId}`;
+}
+
+function getLocalVerificationStorageKey(userId: string) {
+  return `campus-community:verification:${userId}`;
 }
 
 function getDefaultNickname(email?: string) {
@@ -158,6 +178,21 @@ function parseStoredProfile(rawValue: string | null) {
   }
 }
 
+function parseStoredVerification(rawValue: string | null) {
+  if (!rawValue) {
+    return {};
+  }
+
+  try {
+    return { verification: JSON.parse(rawValue) as VerificationRecord };
+  } catch {
+    return {
+      error:
+        '로컬 인증 요청 캐시를 읽는 중 문제가 발생해 저장된 값을 초기화하고 다시 시작합니다.',
+    };
+  }
+}
+
 function mapVerificationStatusToReviewStatus(
   verificationStatus: VerificationStatus
 ): VerificationRecord['status'] {
@@ -170,6 +205,84 @@ function mapVerificationStatusToReviewStatus(
   }
 
   return 'pending';
+}
+
+function mapReviewStatusToVerificationStatus(
+  reviewStatus: VerificationRecord['status']
+): VerificationStatus {
+  if (reviewStatus === 'approved') {
+    return 'verified';
+  }
+
+  if (reviewStatus === 'rejected') {
+    return 'rejected';
+  }
+
+  return 'pending';
+}
+
+function getVerificationTimestamp(
+  verification?: Pick<VerificationRecord, 'reviewedAt' | 'submittedAt'>
+) {
+  if (!verification) {
+    return 0;
+  }
+
+  const source = verification.reviewedAt ?? verification.submittedAt;
+  const timestamp = Date.parse(source);
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function selectNewerVerification(
+  localVerification?: VerificationRecord,
+  remoteVerification?: VerificationRecord
+) {
+  if (!localVerification && !remoteVerification) {
+    return undefined;
+  }
+
+  if (!localVerification) {
+    return { verification: remoteVerification, storageMode: 'supabase' as const };
+  }
+
+  if (!remoteVerification) {
+    return {
+      verification: localVerification,
+      storageMode:
+        localVerification.syncState === 'retry_required'
+          ? ('local_retry' as const)
+          : ('local_cache' as const),
+    };
+  }
+
+  if (
+    localVerification.method === 'student_id_manual' &&
+    localVerification.syncState === 'retry_required' &&
+    remoteVerification.method === 'student_id_manual'
+  ) {
+    return {
+      verification: remoteVerification,
+      storageMode: 'supabase' as const,
+      syncMessage: '서버에 접수된 학생증 인증 요청을 우선 사용합니다.',
+    };
+  }
+
+  const localTimestamp = getVerificationTimestamp(localVerification);
+  const remoteTimestamp = getVerificationTimestamp(remoteVerification);
+
+  if (localTimestamp > remoteTimestamp) {
+    return {
+      verification: localVerification,
+      storageMode:
+        localVerification.syncState === 'retry_required'
+          ? ('local_retry' as const)
+          : ('local_cache' as const),
+      syncMessage: '로컬 인증 요청이 더 최신이라 현재는 로컬 값을 우선 사용합니다.',
+    };
+  }
+
+  return { verification: remoteVerification, storageMode: 'supabase' as const };
 }
 
 function isValidNickname(nickname: string) {
@@ -229,10 +342,31 @@ function buildVerificationRecord(
         ? authUser.email_confirmed_at ?? authUser.created_at
         : undefined,
     submittedLabel: '학교 이메일 인증',
+    syncState: 'synced',
+  };
+}
+
+function applyManualVerificationToProfile(
+  baseProfile: Profile,
+  verification?: VerificationRecord
+) {
+  if (!verification || verification.method !== 'student_id_manual') {
+    return baseProfile;
+  }
+
+  const derivedStatus = mapReviewStatusToVerificationStatus(verification.status);
+  const nextTimestamp = verification.reviewedAt ?? verification.submittedAt;
+
+  return {
+    ...baseProfile,
+    verificationStatus: derivedStatus,
+    primaryUniversityId: verification.universityId ?? baseProfile.primaryUniversityId,
+    updatedAt: nextTimestamp ?? baseProfile.updatedAt,
   };
 }
 
 export function AppSessionProvider({ children }: PropsWithChildren) {
+  const { track } = useAnalytics();
   const { bootstrap, user, isLoading: isAuthLoading, isAuthenticated, currentEmail } =
     useSupabaseAuth();
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
@@ -240,6 +374,11 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
   const [isHydrating, setIsHydrating] = useState(true);
   const [profileStorageMode, setProfileStorageMode] = useState<ProfileStorageMode>('auth_seed');
   const [profileSyncMessage, setProfileSyncMessage] = useState<string | undefined>();
+  const [verificationStorageMode, setVerificationStorageMode] =
+    useState<VerificationStorageMode>('auth_seed');
+  const [verificationSyncMessage, setVerificationSyncMessage] = useState<string | undefined>();
+  const lastVerificationEventKeyRef = useRef<string | undefined>(undefined);
+  const lastAccountStatusEventKeyRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (isAuthLoading) {
@@ -259,30 +398,54 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         setVerificationRecord(undefined);
         setProfileStorageMode('auth_seed');
         setProfileSyncMessage(undefined);
+        setVerificationStorageMode('auth_seed');
+        setVerificationSyncMessage(undefined);
         setIsHydrating(false);
         return;
       }
 
       setIsHydrating(true);
 
-      const storageKey = getLocalProfileStorageKey(user.id);
-      const storedValue = await AsyncStorage.getItem(storageKey);
-      const parsedStoredProfile = parseStoredProfile(storedValue);
+      const profileStorageKey = getLocalProfileStorageKey(user.id);
+      const verificationStorageKey = getLocalVerificationStorageKey(user.id);
+      const [storedProfileValue, storedVerificationValue] = await Promise.all([
+        AsyncStorage.getItem(profileStorageKey),
+        AsyncStorage.getItem(verificationStorageKey),
+      ]);
+      const parsedStoredProfile = parseStoredProfile(storedProfileValue);
+      const parsedStoredVerification = parseStoredVerification(storedVerificationValue);
 
       if (parsedStoredProfile.error) {
-        await AsyncStorage.removeItem(storageKey);
+        await AsyncStorage.removeItem(profileStorageKey);
+      }
+
+      if (parsedStoredVerification.error) {
+        await AsyncStorage.removeItem(verificationStorageKey);
       }
 
       const storedProfile = parsedStoredProfile.profile;
+      const storedVerification = parsedStoredVerification.verification;
       const localProfile = storedProfile
         ? buildProfileFromAuthUser(user, storedProfile)
         : undefined;
+      const localVerification =
+        storedVerification?.method === 'student_id_manual' ? storedVerification : undefined;
       let nextProfile = localProfile ?? buildProfileFromAuthUser(user);
       let nextStorageMode: ProfileStorageMode = localProfile ? 'local_cache' : 'auth_seed';
       let nextSyncMessage = parsedStoredProfile.error;
+      let nextVerification = localVerification;
+      let nextVerificationStorageMode: VerificationStorageMode = localVerification
+        ? localVerification.syncState === 'retry_required'
+          ? 'local_retry'
+          : 'local_cache'
+        : 'auth_seed';
+      let nextVerificationSyncMessage = parsedStoredVerification.error;
 
       if (bootstrap.status === 'ready_for_client_wiring') {
-        const remoteProfileResult = await getProfileById(user.id);
+        const [remoteProfileResult, remoteVerificationResult] = await Promise.all([
+          getProfileById(user.id),
+          getLatestVerificationByProfileId(user.id),
+        ]);
 
         if (remoteProfileResult.ok && remoteProfileResult.profile) {
           const remoteProfile = buildProfileFromAuthUser(user, remoteProfileResult.profile);
@@ -294,7 +457,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
             nextSyncMessage = preferredProfile.syncMessage ?? parsedStoredProfile.error;
           }
 
-          await AsyncStorage.setItem(storageKey, JSON.stringify(nextProfile));
+          await AsyncStorage.setItem(profileStorageKey, JSON.stringify(nextProfile));
         } else if (!remoteProfileResult.ok) {
           nextSyncMessage = [
             parsedStoredProfile.error,
@@ -303,16 +466,64 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
             .filter(Boolean)
             .join(' ');
         }
+
+        if (remoteVerificationResult.ok && remoteVerificationResult.verification) {
+          const preferredVerification = selectNewerVerification(
+            localVerification,
+            remoteVerificationResult.verification
+          );
+
+          if (preferredVerification?.verification) {
+            nextVerification = preferredVerification.verification;
+            nextVerificationStorageMode = preferredVerification.storageMode;
+            nextVerificationSyncMessage =
+              preferredVerification.syncMessage ?? parsedStoredVerification.error;
+          }
+
+          await AsyncStorage.setItem(
+            verificationStorageKey,
+            JSON.stringify(nextVerification ?? remoteVerificationResult.verification)
+          );
+        } else if (!remoteVerificationResult.ok) {
+          nextVerificationSyncMessage = [
+            parsedStoredVerification.error,
+            `Supabase verifications 조회에 실패해 로컬 인증 요청을 사용합니다. ${remoteVerificationResult.error ?? ''}`.trim(),
+          ]
+            .filter(Boolean)
+            .join(' ');
+        }
       }
+
+      if (!nextVerification) {
+        nextVerification = buildVerificationRecord(user, nextProfile.verificationStatus);
+        nextVerificationStorageMode = 'auth_seed';
+      }
+
+      const shouldSyncProfileFromVerification =
+        nextVerification?.method === 'student_id_manual' &&
+        (nextStorageMode !== 'supabase' || nextVerificationStorageMode === 'supabase');
+
+      if (shouldSyncProfileFromVerification) {
+        nextProfile = applyManualVerificationToProfile(nextProfile, nextVerification);
+
+        if (nextVerificationStorageMode === 'supabase') {
+          nextStorageMode = 'supabase';
+          nextSyncMessage = nextVerificationSyncMessage ?? nextSyncMessage;
+        }
+      }
+
+      await AsyncStorage.setItem(profileStorageKey, JSON.stringify(nextProfile));
 
       if (!active) {
         return;
       }
 
       setProfile(nextProfile);
-      setVerificationRecord(buildVerificationRecord(user, nextProfile.verificationStatus));
+      setVerificationRecord(nextVerification);
       setProfileStorageMode(nextStorageMode);
       setProfileSyncMessage(nextSyncMessage);
+      setVerificationStorageMode(nextVerificationStorageMode);
+      setVerificationSyncMessage(nextVerificationSyncMessage);
       setIsHydrating(false);
     };
 
@@ -334,12 +545,32 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
     );
   };
 
+  const persistVerification = async (nextVerification?: VerificationRecord) => {
+    if (!user) {
+      return;
+    }
+
+    const storageKey = getLocalVerificationStorageKey(user.id);
+
+    if (!nextVerification || nextVerification.method !== 'student_id_manual') {
+      await AsyncStorage.removeItem(storageKey);
+      return;
+    }
+
+    await AsyncStorage.setItem(storageKey, JSON.stringify(nextVerification));
+  };
+
   const updateProfile = (updater: (current: Profile) => Profile) => {
     setProfile((current) => {
       const nextProfile = updater(current);
       void persistProfile(nextProfile);
       return nextProfile;
     });
+  };
+
+  const updateVerification = (nextVerification?: VerificationRecord) => {
+    setVerificationRecord(nextVerification);
+    void persistVerification(nextVerification);
   };
 
   const canAccessCommunity =
@@ -351,6 +582,72 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
     profile.accountStatus !== 'banned';
 
   const isReadOnly = profile.accountStatus === 'restricted';
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      lastVerificationEventKeyRef.current = undefined;
+      lastAccountStatusEventKeyRef.current = undefined;
+      return;
+    }
+
+    const verificationMethod = verificationRecord?.method;
+    const nextVerificationEventKey = [
+      user.id,
+      profile.verificationStatus,
+      verificationMethod ?? 'none',
+    ].join(':');
+    const nextAccountStatusEventKey = [user.id, profile.accountStatus].join(':');
+
+    const commonProperties = {
+      verification_method: verificationMethod ?? 'none',
+      university_id: profile.primaryUniversityId ?? null,
+      major_group: profile.primaryMajorGroupId ?? null,
+    };
+
+    if (lastVerificationEventKeyRef.current !== nextVerificationEventKey) {
+      if (profile.verificationStatus === 'verified' && verificationMethod === 'email') {
+        track('school_email_verified', commonProperties);
+      }
+
+      if (
+        profile.verificationStatus === 'verified' &&
+        verificationMethod === 'student_id_manual'
+      ) {
+        track('manual_verification_approved', commonProperties);
+      }
+
+      if (
+        profile.verificationStatus === 'rejected' &&
+        verificationMethod === 'student_id_manual'
+      ) {
+        track('manual_verification_rejected', commonProperties);
+      }
+
+      lastVerificationEventKeyRef.current = nextVerificationEventKey;
+    }
+
+    if (lastAccountStatusEventKeyRef.current !== nextAccountStatusEventKey) {
+      if (profileStorageMode === 'supabase' && profile.accountStatus === 'restricted') {
+        track('user_restricted', commonProperties);
+      }
+
+      if (profileStorageMode === 'supabase' && profile.accountStatus === 'banned') {
+        track('user_banned', commonProperties);
+      }
+
+      lastAccountStatusEventKeyRef.current = nextAccountStatusEventKey;
+    }
+  }, [
+    isAuthenticated,
+    profile.accountStatus,
+    profile.primaryMajorGroupId,
+    profile.primaryUniversityId,
+    profileStorageMode,
+    profile.verificationStatus,
+    track,
+    user,
+    verificationRecord?.method,
+  ]);
 
   const completeOnboarding = async ({
     nickname,
@@ -415,20 +712,32 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
       updatedAt: new Date().toISOString(),
     };
 
-    updateProfile(() => nextProfile);
-
     if (bootstrap.status === 'ready_for_client_wiring') {
-      const saveResult = await upsertProfile(nextProfile);
+      const saveResult = await completeOnboardingProfile(nextProfile);
 
       if (!saveResult.ok) {
-        setProfileStorageMode('local_cache');
+        if (saveResult.errorKind === 'network') {
+          updateProfile(() => nextProfile);
+          setProfileStorageMode('local_cache');
+          setProfileSyncMessage(
+            `Supabase 연결이 불안정해 온보딩 결과를 로컬에만 보관했습니다. ${saveResult.error ?? ''}`.trim()
+          );
+
+          return {
+            ok: true,
+            message: '연결이 불안정해 온보딩 결과를 로컬에만 저장했습니다. 네트워크가 안정되면 다시 확인해 주세요.',
+          };
+        }
+
         setProfileSyncMessage(
-          `Supabase profiles 저장에 실패해 로컬에만 보관했습니다. ${saveResult.error ?? ''}`.trim()
+          saveResult.error ?? '온보딩 저장을 완료하지 못했습니다.'
         );
 
         return {
-          ok: true,
-          message: '온보딩은 완료되었지만, 현재 프로필은 로컬에만 저장되었습니다.',
+          ok: false,
+          message:
+            saveResult.error ??
+            '온보딩 저장을 완료하지 못했습니다. 입력값과 현재 인증 상태를 다시 확인해 주세요.',
         };
       }
 
@@ -437,14 +746,237 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
       updateProfile(() => syncedProfile);
       setProfileStorageMode('supabase');
       setProfileSyncMessage(undefined);
+      track('nickname_set', {
+        major_group: normalizedMajorGroupId,
+        university_id: normalizedUniversityId,
+        storage_mode: 'supabase',
+      });
+      track('major_group_selected', {
+        major_group: normalizedMajorGroupId,
+        university_id: normalizedUniversityId,
+        storage_mode: 'supabase',
+      });
+      track('onboarding_completed', {
+        major_group: normalizedMajorGroupId,
+        university_id: normalizedUniversityId,
+        storage_mode: 'supabase',
+      });
 
       return { ok: true, message: '온보딩과 프로필 저장이 완료되었습니다.' };
     }
 
+    updateProfile(() => nextProfile);
     setProfileStorageMode('local_cache');
     setProfileSyncMessage('Supabase 설정 전이라 로컬 저장 구조만 사용 중입니다.');
+    track('nickname_set', {
+      major_group: normalizedMajorGroupId,
+      university_id: normalizedUniversityId,
+      storage_mode: 'local_cache',
+    });
+    track('major_group_selected', {
+      major_group: normalizedMajorGroupId,
+      university_id: normalizedUniversityId,
+      storage_mode: 'local_cache',
+    });
+    track('onboarding_completed', {
+      major_group: normalizedMajorGroupId,
+      university_id: normalizedUniversityId,
+      storage_mode: 'local_cache',
+    });
 
     return { ok: true, message: '온보딩이 로컬 저장 구조에 반영되었습니다.' };
+  };
+
+  const submitManualVerification = async ({
+    universityId,
+    acceptedMaskingGuide,
+    acceptedEvidenceChecklist,
+  }: SubmitManualVerificationInput): Promise<ActionResult> => {
+    if (!user) {
+      return { ok: false, message: '학생증 수동 인증은 로그인 후 진행할 수 있습니다.' };
+    }
+
+    if (profile.verificationStatus === 'verified') {
+      return { ok: false, message: '이미 인증이 완료된 계정입니다.' };
+    }
+
+    const normalizedUniversityId = universityId.trim();
+    const selectedUniversity = getUniversityById(normalizedUniversityId);
+
+    if (!normalizedUniversityId) {
+      return { ok: false, message: '학교를 선택해 주세요.' };
+    }
+
+    if (!selectedUniversity?.isActive) {
+      return { ok: false, message: '허용된 학교 목록에서 다시 선택해 주세요.' };
+    }
+
+    if (!acceptedMaskingGuide) {
+      return { ok: false, message: '민감정보 마스킹 안내 확인이 필요합니다.' };
+    }
+
+    if (!acceptedEvidenceChecklist) {
+      return { ok: false, message: '재학 증빙 준비 확인이 필요합니다.' };
+    }
+
+    const schoolEmailUniversity = currentEmail ? findUniversityByEmail(currentEmail) : undefined;
+
+    if (schoolEmailUniversity) {
+      return {
+        ok: false,
+        message: '지원 학교 이메일이 있는 계정은 학교 이메일 인증 경로를 먼저 사용해 주세요.',
+      };
+    }
+
+    const submittedAt = new Date().toISOString();
+    const nextVerification: VerificationRecord = {
+      id: `verification-manual-${user.id}-${submittedAt}`,
+      profileId: user.id,
+      method: 'student_id_manual',
+      universityId: normalizedUniversityId,
+      status: 'pending',
+      submittedAt,
+      submittedLabel: '학생증 수동 인증 제출',
+      syncState: 'retry_required',
+    };
+    const nextProfile: Profile = {
+      ...profile,
+      verificationStatus: 'pending',
+      primaryUniversityId: normalizedUniversityId,
+      updatedAt: submittedAt,
+    };
+
+    if (bootstrap.status === 'ready_for_client_wiring') {
+      const verificationSaveResult = await submitManualVerificationRequest({
+        universityId: normalizedUniversityId,
+      });
+
+      if (!verificationSaveResult.ok || !verificationSaveResult.verification) {
+        if (verificationSaveResult.errorKind === 'network') {
+          updateProfile(() => nextProfile);
+          updateVerification(nextVerification);
+          setVerificationStorageMode('local_retry');
+          setVerificationSyncMessage(
+            `Supabase 연결이 불안정해 학생증 수동 인증 요청을 로컬에만 보관했습니다. ${verificationSaveResult.error ?? ''}`.trim()
+          );
+          setProfileStorageMode('local_cache');
+          setProfileSyncMessage(
+            '학생증 수동 인증 요청은 로컬 상태를 우선 사용합니다. 네트워크가 안정되면 다시 제출해 주세요.'
+          );
+          track('manual_verification_submitted', {
+            university_id: normalizedUniversityId,
+            storage_mode: 'local_retry',
+          });
+
+          return {
+            ok: true,
+            message: '연결이 불안정해 학생증 수동 인증 요청을 로컬에만 저장했습니다. 네트워크가 안정되면 다시 제출해 주세요.',
+          };
+        }
+
+        const [remoteProfileResult, remoteVerificationResult] = await Promise.all([
+          getProfileById(user.id),
+          getLatestVerificationByProfileId(user.id),
+        ]);
+
+        if (remoteVerificationResult.ok && remoteVerificationResult.verification) {
+          const syncedVerification = remoteVerificationResult.verification;
+          const syncedProfile = applyManualVerificationToProfile(
+            remoteProfileResult.profile ?? profile,
+            syncedVerification
+          );
+
+          updateVerification(syncedVerification);
+          updateProfile(() => syncedProfile);
+          setVerificationStorageMode('supabase');
+          setVerificationSyncMessage(undefined);
+
+          if (remoteProfileResult.ok && remoteProfileResult.profile) {
+            setProfileStorageMode('supabase');
+            setProfileSyncMessage(undefined);
+          } else {
+            setProfileStorageMode('local_cache');
+            setProfileSyncMessage(
+              `서버 인증 상태는 다시 불러왔지만 최신 프로필 동기화는 일부 지연되고 있습니다. ${remoteProfileResult.error ?? ''}`.trim()
+            );
+          }
+
+          track('manual_verification_submitted', {
+            university_id: normalizedUniversityId,
+            storage_mode: 'supabase_resynced',
+          });
+
+          return {
+            ok: true,
+            message:
+              syncedVerification.status === 'pending'
+                ? '이미 검토 중인 학생증 수동 인증 요청이 있어 서버 상태를 다시 불러왔습니다.'
+                : '학생증 수동 인증 상태를 서버 기준으로 다시 불러왔습니다.',
+          };
+        }
+
+        return {
+          ok: false,
+          message:
+            verificationSaveResult.error ??
+            '학생증 수동 인증 요청을 접수하지 못했습니다. 입력값과 현재 계정 상태를 다시 확인해 주세요.',
+        };
+      }
+
+      const profileSaveResult = await getProfileById(user.id);
+      const syncedVerification = verificationSaveResult.verification;
+      const syncedProfileBase = profileSaveResult.profile ?? nextProfile;
+      const syncedProfileFromVerification = applyManualVerificationToProfile(
+        syncedProfileBase,
+        syncedVerification
+      );
+
+      updateVerification(syncedVerification);
+      updateProfile(() => syncedProfileFromVerification);
+      setVerificationStorageMode('supabase');
+      setVerificationSyncMessage(undefined);
+
+      if (profileSaveResult.ok && profileSaveResult.profile) {
+        updateProfile(() =>
+          applyManualVerificationToProfile(profileSaveResult.profile!, syncedVerification)
+        );
+        setProfileStorageMode('supabase');
+        setProfileSyncMessage(undefined);
+      } else {
+        setProfileStorageMode('local_cache');
+        setProfileSyncMessage(
+          `학생증 수동 인증 요청은 서버에 접수되었지만 최신 프로필 동기화에 실패했습니다. ${profileSaveResult.error ?? ''}`.trim()
+        );
+      }
+      track('manual_verification_submitted', {
+        university_id: normalizedUniversityId,
+        storage_mode: profileSaveResult.ok ? 'supabase' : 'supabase_partial',
+      });
+
+      return {
+        ok: true,
+        message:
+          profileSaveResult.ok
+            ? '학생증 수동 인증 요청이 접수되었습니다. 검토 결과가 나올 때까지 잠시 기다려 주세요.'
+            : '학생증 수동 인증 요청은 접수되었지만 최신 상태 동기화가 일부 지연되고 있습니다.',
+      };
+    }
+
+    updateProfile(() => nextProfile);
+    updateVerification(nextVerification);
+    setVerificationStorageMode('local_retry');
+    setVerificationSyncMessage('Supabase 설정 전이라 수동 인증 요청을 로컬에만 저장했습니다.');
+    setProfileStorageMode('local_cache');
+    setProfileSyncMessage('Supabase 설정 전이라 프로필 상태도 로컬에만 저장했습니다.');
+    track('manual_verification_submitted', {
+      university_id: normalizedUniversityId,
+      storage_mode: 'local_cache',
+    });
+
+    return {
+      ok: true,
+      message: '학생증 수동 인증 요청을 로컬 저장 구조에 반영했습니다.',
+    };
   };
 
   const setAccountStatus = (status: AccountStatus) => {
@@ -452,6 +984,10 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
       ...current,
       accountStatus: status,
     }));
+    setProfileStorageMode('local_cache');
+    setProfileSyncMessage(
+      '프로필 화면에서 바꾼 계정 상태는 현재 기기에서만 반영되는 로컬 데모 값입니다.'
+    );
   };
 
   const resetDemo = () => {
@@ -460,6 +996,8 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
       setVerificationRecord(undefined);
       setProfileStorageMode('auth_seed');
       setProfileSyncMessage(undefined);
+      setVerificationStorageMode('auth_seed');
+      setVerificationSyncMessage(undefined);
       return;
     }
 
@@ -469,7 +1007,12 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
     setVerificationRecord(buildVerificationRecord(user, resetProfile.verificationStatus));
     setProfileStorageMode('auth_seed');
     setProfileSyncMessage(undefined);
-    void AsyncStorage.removeItem(getLocalProfileStorageKey(user.id));
+    setVerificationStorageMode('auth_seed');
+    setVerificationSyncMessage(undefined);
+    void Promise.all([
+      AsyncStorage.removeItem(getLocalProfileStorageKey(user.id)),
+      AsyncStorage.removeItem(getLocalVerificationStorageKey(user.id)),
+    ]);
   };
 
   return (
@@ -487,7 +1030,10 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         authEmail: currentEmail,
         profileStorageMode,
         profileSyncMessage,
+        verificationStorageMode,
+        verificationSyncMessage,
         completeOnboarding,
+        submitManualVerification,
         setAccountStatus,
         resetDemo,
       }}>

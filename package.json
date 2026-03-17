@@ -10,7 +10,14 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "doctor": "npx expo-doctor"
+    "doctor": "npx expo-doctor",
+    "check:board-lookups": "node ./scripts/check-board-lookups.mjs",
+    "check:author-profile-summaries": "node ./scripts/check-author-profile-summaries.mjs",
+    "check:community-metadata": "node ./scripts/check-community-metadata-lookups.mjs",
+    "check:community-snapshot": "node ./scripts/check-community-snapshot-cache.mjs",
+    "check:community-safety": "node ./scripts/check-community-safety-tools.mjs",
+    "check:moderation-wiring": "node ./scripts/check-moderation-server-wiring.mjs",
+    "check:analytics": "node ./scripts/check-analytics-instrumentation.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

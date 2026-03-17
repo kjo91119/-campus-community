@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -12,15 +12,12 @@ import {
   POST_CATEGORY_OPTIONS,
   POST_TYPE_OPTIONS,
 } from '@/constants/community';
-import {
-  getBoardById,
-  getMajorGroupById,
-  getUniversityById,
-} from '@/data/mock-community';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAnalytics } from '@/hooks/use-analytics';
 import { useCommunityData } from '@/hooks/use-community-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getMajorGroupById, getUniversityById } from '@/lib/community/metadata';
 import type {
   PostCategory,
   PostType,
@@ -32,9 +29,10 @@ function getParamValue(value?: string | string[]) {
 
 export default function WriteScreen() {
   const router = useRouter();
+  const { track } = useAnalytics();
   const params = useLocalSearchParams<{ boardId: string }>();
   const boardId = getParamValue(params.boardId);
-  const { createPost, getWriteAccessForBoard, isHydrating } = useCommunityData();
+  const { createPost, getBoardById, getWriteAccessForBoard, isHydrating } = useCommunityData();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [category, setCategory] = useState<Exclude<PostCategory, 'recruitment'>>('free');
@@ -47,6 +45,20 @@ export default function WriteScreen() {
   const writeAccess = getWriteAccessForBoard(boardId);
   const university = getUniversityById(board?.universityId);
   const majorGroup = getMajorGroupById(board?.majorGroupId);
+  const hasTrackedCreateStartRef = useRef(false);
+
+  useEffect(() => {
+    if (!board || hasTrackedCreateStartRef.current) {
+      return;
+    }
+
+    track('post_create_started', {
+      board_scope: board.scopeType,
+      university_id: board.universityId ?? null,
+      major_group: board.majorGroupId ?? null,
+    });
+    hasTrackedCreateStartRef.current = true;
+  }, [board, track]);
 
   if (isHydrating) {
     return null;
