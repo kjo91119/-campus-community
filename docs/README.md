@@ -25,7 +25,7 @@
 12. [13-cross-review-brief.md](./13-cross-review-brief.md)
 13. [14-phase1-cross-review-brief.md](./14-phase1-cross-review-brief.md)
 14. [15-phase1-implementation-review-brief.md](./15-phase1-implementation-review-brief.md)
-15. [16-supabase-connection-prep.md](./16-supabase-connection-prep.md)
+15. [16-supabase-connection-guide.md](./16-supabase-connection-guide.md)
 16. [17-phase1-data-supabase-review-brief.md](./17-phase1-data-supabase-review-brief.md)
 17. [18-supabase-auth-implementation-review-brief.md](./18-supabase-auth-implementation-review-brief.md)
 18. [19-onboarding-profile-implementation-review-brief.md](./19-onboarding-profile-implementation-review-brief.md)
@@ -45,7 +45,7 @@
 32. [33-reports-blocks-server-wiring-review-brief.md](./33-reports-blocks-server-wiring-review-brief.md)
 33. [34-basic-moderation-flow-review-brief.md](./34-basic-moderation-flow-review-brief.md)
 34. [35-analytics-instrumentation-review-brief.md](./35-analytics-instrumentation-review-brief.md)
-35. [36-launch-readiness-checklist.md](./36-launch-readiness-checklist.md)
+35. [36-launch-readiness-guide.md](./36-launch-readiness-guide.md)
 36. [37-launch-readiness-checklist-review-brief.md](./37-launch-readiness-checklist-review-brief.md)
 37. [TASKS.md](../TASKS.md)
 
@@ -69,7 +69,7 @@
 | [13-cross-review-brief.md](./13-cross-review-brief.md) | 다른 모델이나 리뷰어에게 문서 세트 교차검증을 요청할 때 쓰는 지시서다. 충돌, 과범위, 운영 리스크를 중심으로 보게 만든다. |
 | [14-phase1-cross-review-brief.md](./14-phase1-cross-review-brief.md) | 최신 기준으로 문서 정합성과 Phase 1 구현 계획을 함께 검토하는 지시서다. 4탭 구조, 모집 댓글 방식, 권한 매트릭스, 파일 작업 순서까지 같이 보게 만든다. |
 | [15-phase1-implementation-review-brief.md](./15-phase1-implementation-review-brief.md) | 실제 구현된 Phase 1 골격 코드를 검토하는 지시서다. 라우팅, 세션 가드, 더미 데이터 구조, 문서-구현 일치 여부를 코드 리뷰 관점에서 보게 만든다. |
-| [16-supabase-connection-prep.md](./16-supabase-connection-prep.md) | 현재 앱 구조와 문서의 데이터 모델을 대조하고, Supabase 연결 직전에 필요한 env, 패키지, 파일 구조, 연결 우선순위를 정리한 준비 문서다. |
+| [16-supabase-connection-guide.md](./16-supabase-connection-guide.md) | 현재 앱 구조와 문서의 데이터 모델을 대조하고, Supabase 연결 직전에 필요한 env, 패키지, 파일 구조, 연결 우선순위를 정리한 연결 설명서다. |
 | [17-phase1-data-supabase-review-brief.md](./17-phase1-data-supabase-review-brief.md) | 타입, mock 데이터, Supabase 연결 전 준비 상태를 다시 교차검증받기 위한 최신 지시서다. 데이터 구조와 다음 단계 연결성 중심으로 보게 만든다. |
 | [18-supabase-auth-implementation-review-brief.md](./18-supabase-auth-implementation-review-brief.md) | Supabase Auth 구현 단계를 교차검증하기 위한 최신 지시서다. 세션 유지, 이메일 auth 흐름, auth/tabs 분기, 다음 단계 `profiles` 연결성을 중심으로 보게 만든다. |
 | [19-onboarding-profile-implementation-review-brief.md](./19-onboarding-profile-implementation-review-brief.md) | 인증 이후 온보딩/프로필 초기 설정 구현을 교차검증하기 위한 최신 지시서다. 학교/전공군 선택, `profiles` 저장 경계, 홈 진입 조건, SQL-타입-코드 정합성을 중심으로 보게 만든다. |
@@ -89,8 +89,8 @@
 | [33-reports-blocks-server-wiring-review-brief.md](./33-reports-blocks-server-wiring-review-brief.md) | 로컬 신고/차단 골격을 Supabase `reports` / `blocks` RPC와 연결한 단계를 교차검증하기 위한 최신 지시서다. 서버 우선 hydrate, server reject vs network fallback 분리, unblock 가능성 유지 중심으로 보게 만든다. |
 | [34-basic-moderation-flow-review-brief.md](./34-basic-moderation-flow-review-brief.md) | `moderation_events`와 `apply_moderation_action(...)`를 추가해 기본 운영 제재 흐름을 실제화한 단계를 교차검증하기 위한 최신 지시서다. moderator 권한 검증, content hide/user restriction 경계, 로컬 데모 상태와 실제 운영 상태 구분 중심으로 보게 만든다. |
 | [35-analytics-instrumentation-review-brief.md](./35-analytics-instrumentation-review-brief.md) | 로컬 analytics buffer와 핵심 사용자 흐름 계측을 붙인 단계를 교차검증하기 위한 최신 지시서다. provider 단일 진입점, 이벤트 누락, 중복 계측 리스크, 문서 KPI 정합성 중심으로 보게 만든다. |
-| [36-launch-readiness-checklist.md](./36-launch-readiness-checklist.md) | 베타 직전 필요한 QA, 시딩, 운영·정책, 필수 SQL 적용 체크를 한 장으로 묶은 런치 준비 문서다. 지금 단계에서 새 기능보다 무엇을 닫아야 하는지 실무 기준으로 정리한다. |
-| [37-launch-readiness-checklist-review-brief.md](./37-launch-readiness-checklist-review-brief.md) | `36-launch-readiness-checklist.md`가 현재 코드/SQL/운영 문서와 맞는지 교차검증하기 위한 최신 지시서다. QA 범위, 시딩 기준, 정책 핸드오프, 적용 SQL 목록 정합성 중심으로 보게 만든다. |
+| [36-launch-readiness-guide.md](./36-launch-readiness-guide.md) | 베타 직전 필요한 QA, 시딩, 운영·정책, 필수 SQL 적용 체크를 한 장으로 묶은 런치 준비 설명서다. 지금 단계에서 새 기능보다 무엇을 닫아야 하는지 실무 기준으로 정리한다. |
+| [37-launch-readiness-checklist-review-brief.md](./37-launch-readiness-checklist-review-brief.md) | `36-launch-readiness-guide.md`가 현재 코드/SQL/운영 문서와 맞는지 교차검증하기 위한 최신 지시서다. QA 범위, 시딩 기준, 정책 핸드오프, 적용 SQL 목록 정합성 중심으로 보게 만든다. |
 | [TASKS.md](../TASKS.md) | 실제 실행 체크리스트다. 오늘 할 일, 이번 주 할 일, MVP 전 필수, 출시 전 필수로 나눠 개발자가 바로 움직일 수 있게 작성했다. |
 
 ## 문서 사용 원칙

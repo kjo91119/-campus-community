@@ -50,7 +50,7 @@
 - `docs/07-supabase-data-model-draft.md`
 - `docs/08-auth-verification-moderation.md`
 - `docs/09-screen-list-and-prd.md`
-- `docs/16-supabase-connection-prep.md`
+- `docs/16-supabase-connection-guide.md`
 - `TASKS.md`
 
 ## 리뷰 목표

@@ -22,7 +22,7 @@
 - `types/domain.ts`를 보강해 전공군, 학교, 게시판, 게시글, 댓글, 모집글, 프로필, 인증 관련 타입을 정리
 - `data/mock-community.ts`를 보강해 화면에서 재사용 가능한 mock 데이터와 helper를 정리
 - `lib/supabase/env.ts`, `lib/supabase/client.ts`를 추가해 env 체크와 초기화 파일 위치만 잡아둠
-- `docs/16-supabase-connection-prep.md`를 추가해 문서 모델과 앱 구조 대조, env, 패키지, 연결 우선순위를 정리
+- `docs/16-supabase-connection-guide.md`를 추가해 문서 모델과 앱 구조 대조, env, 패키지, 연결 우선순위를 정리
 
 중요:
 
@@ -53,7 +53,7 @@
 - `docs/07-supabase-data-model-draft.md`
 - `docs/08-auth-verification-moderation.md`
 - `docs/09-screen-list-and-prd.md`
-- `docs/16-supabase-connection-prep.md`
+- `docs/16-supabase-connection-guide.md`
 - `TASKS.md`
 
 ## 리뷰 목표

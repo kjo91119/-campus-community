@@ -1,6 +1,6 @@
 # 37. 런치 준비 체크리스트 교차검증 지시서
 
-이번 검토는 기능 구현 리뷰가 아니라 `docs/36-launch-readiness-checklist.md`가 현재 코드/SQL/운영 기준에 맞는지 보는 문서 검증이다. QA, 시딩, 운영정책, 필수 SQL 적용 체크가 지금 코드베이스 상태와 어긋나지 않는지 확인해라.
+이번 검토는 기능 구현 리뷰가 아니라 `docs/36-launch-readiness-guide.md`가 현재 코드/SQL/운영 기준에 맞는지 보는 문서 검증이다. QA, 시딩, 운영정책, 필수 SQL 적용 체크가 지금 코드베이스 상태와 어긋나지 않는지 확인해라.
 
 ## 답변 작성 위치
 
@@ -8,10 +8,10 @@
 
 ## 꼭 읽을 파일
 
-- `docs/36-launch-readiness-checklist.md`
+- `docs/36-launch-readiness-guide.md`
 - `docs/08-auth-verification-moderation.md`
 - `docs/10-metrics-and-analytics.md`
-- `docs/16-supabase-connection-prep.md`
+- `docs/16-supabase-connection-guide.md`
 - `supabase/sql/04_secure_profiles_and_auth_rpcs.sql`
 - `supabase/sql/05_add_profile_summary_rpc.sql`
 - `supabase/sql/06_add_reports_blocks_rpcs.sql`
