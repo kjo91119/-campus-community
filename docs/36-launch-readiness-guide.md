@@ -25,6 +25,7 @@
 - 운영 DB에는 migration 또는 SQL editor 기준으로 실제 적용 이력을 남긴다.
 - QA baseline 시딩과 reset 절차는 [38-launch-seeding-and-qa-guide.md](/home/junoh/projects/campus-community/docs/38-launch-seeding-and-qa-guide.md)를 따른다.
 - launch 직전 moderation 운영 재현 절차는 [40-moderation-smoke-runbook.md](/home/junoh/projects/campus-community/docs/40-moderation-smoke-runbook.md)를 따른다.
+- 실제 실행 결과 기록은 [42-launch-qa-execution-sheet.md](/home/junoh/projects/campus-community/docs/42-launch-qa-execution-sheet.md)를 쓴다.
 
 ## 2. QA 핵심 시나리오
 

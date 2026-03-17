@@ -51,7 +51,9 @@
 38. [39-launch-seeding-and-qa-review-brief.md](./39-launch-seeding-and-qa-review-brief.md)
 39. [40-moderation-smoke-runbook.md](./40-moderation-smoke-runbook.md)
 40. [41-moderation-smoke-runbook-review-brief.md](./41-moderation-smoke-runbook-review-brief.md)
-41. [TASKS.md](../TASKS.md)
+41. [42-launch-qa-execution-sheet.md](./42-launch-qa-execution-sheet.md)
+42. [43-launch-qa-execution-sheet-review-brief.md](./43-launch-qa-execution-sheet-review-brief.md)
+43. [TASKS.md](../TASKS.md)
 
 ## 문서 목록
 
@@ -99,6 +101,8 @@
 | [39-launch-seeding-and-qa-review-brief.md](./39-launch-seeding-and-qa-review-brief.md) | `38-launch-seeding-and-qa-guide.md`와 baseline seed/reset SQL이 현재 schema와 운영 가정에 맞는지 교차검증하기 위한 최신 지시서다. |
 | [40-moderation-smoke-runbook.md](./40-moderation-smoke-runbook.md) | moderator/admin 계정으로 신고 검토, 콘텐츠 숨김, restricted/banned/restored를 실제로 반복 검증하기 위한 운영 실행 설명서다. linked report 제약, 확인 SQL, 복구 절차를 함께 담는다. |
 | [41-moderation-smoke-runbook-review-brief.md](./41-moderation-smoke-runbook-review-brief.md) | `40-moderation-smoke-runbook.md`가 현재 moderation SQL과 런치 운영 가정에 맞는지 교차검증하기 위한 최신 지시서다. |
+| [42-launch-qa-execution-sheet.md](./42-launch-qa-execution-sheet.md) | 실제 launch 직전 QA를 돌릴 때 시딩, 읽기/쓰기, 신고/차단, moderation, analytics, Go / No-Go 판단을 한 장에 기록하기 위한 실행 시트다. |
+| [43-launch-qa-execution-sheet-review-brief.md](./43-launch-qa-execution-sheet-review-brief.md) | `42-launch-qa-execution-sheet.md`가 현재 런치 문서와 운영 절차를 빠뜨리지 않고 기록할 수 있는지 교차검증하기 위한 최신 지시서다. |
 | [TASKS.md](../TASKS.md) | 실제 실행 체크리스트다. 오늘 할 일, 이번 주 할 일, MVP 전 필수, 출시 전 필수로 나눠 개발자가 바로 움직일 수 있게 작성했다. |
 
 ## 문서 사용 원칙

@@ -9,6 +9,7 @@
 - [08-auth-verification-moderation.md](/home/junoh/projects/campus-community/docs/08-auth-verification-moderation.md)
 - [06_add_reports_blocks_rpcs.sql](/home/junoh/projects/campus-community/supabase/sql/06_add_reports_blocks_rpcs.sql)
 - [07_add_moderation_actions.sql](/home/junoh/projects/campus-community/supabase/sql/07_add_moderation_actions.sql)
+- [42-launch-qa-execution-sheet.md](/home/junoh/projects/campus-community/docs/42-launch-qa-execution-sheet.md)
 
 ## 1. 사전 준비
 
@@ -53,6 +54,7 @@ where id = auth.uid();
 
 - `apply_moderation_action(...)`는 moderator/admin이 아니면 실패한다.
 - `p_report_id`를 함께 넘길 때는 그 신고가 현재 `target_type / target_id`와 실제로 연결돼 있어야 한다.
+- 실행 결과와 대상 id는 [42-launch-qa-execution-sheet.md](/home/junoh/projects/campus-community/docs/42-launch-qa-execution-sheet.md)의 moderation 섹션에 바로 남긴다.
 
 ## 3. 기본 실행 순서
 

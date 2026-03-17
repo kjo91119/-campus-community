@@ -16,6 +16,7 @@
 - [08_seed_launch_qa_snapshot.sql](/home/junoh/projects/campus-community/supabase/sql/08_seed_launch_qa_snapshot.sql)
 - [09_reset_launch_qa_snapshot.sql](/home/junoh/projects/campus-community/supabase/sql/09_reset_launch_qa_snapshot.sql)
 - [07_add_moderation_actions.sql](/home/junoh/projects/campus-community/supabase/sql/07_add_moderation_actions.sql)
+- [42-launch-qa-execution-sheet.md](/home/junoh/projects/campus-community/docs/42-launch-qa-execution-sheet.md)
 
 ## 1. 사전 준비
 
@@ -125,6 +126,7 @@
 5. `user_restored` 후 접근 회복 확인
 
 운영자가 그대로 따라 할 실행 절차는 [40-moderation-smoke-runbook.md](/home/junoh/projects/campus-community/docs/40-moderation-smoke-runbook.md)를 우선 본다.
+실행 결과는 [42-launch-qa-execution-sheet.md](/home/junoh/projects/campus-community/docs/42-launch-qa-execution-sheet.md)에 바로 기록한다.
 
 ## 5. moderation 스모크 SQL 예시
 
