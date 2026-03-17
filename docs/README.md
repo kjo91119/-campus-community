@@ -47,7 +47,11 @@
 34. [35-analytics-instrumentation-review-brief.md](./35-analytics-instrumentation-review-brief.md)
 35. [36-launch-readiness-guide.md](./36-launch-readiness-guide.md)
 36. [37-launch-readiness-checklist-review-brief.md](./37-launch-readiness-checklist-review-brief.md)
-37. [TASKS.md](../TASKS.md)
+37. [38-launch-seeding-and-qa-guide.md](./38-launch-seeding-and-qa-guide.md)
+38. [39-launch-seeding-and-qa-review-brief.md](./39-launch-seeding-and-qa-review-brief.md)
+39. [40-moderation-smoke-runbook.md](./40-moderation-smoke-runbook.md)
+40. [41-moderation-smoke-runbook-review-brief.md](./41-moderation-smoke-runbook-review-brief.md)
+41. [TASKS.md](../TASKS.md)
 
 ## 문서 목록
 
@@ -91,6 +95,10 @@
 | [35-analytics-instrumentation-review-brief.md](./35-analytics-instrumentation-review-brief.md) | 로컬 analytics buffer와 핵심 사용자 흐름 계측을 붙인 단계를 교차검증하기 위한 최신 지시서다. provider 단일 진입점, 이벤트 누락, 중복 계측 리스크, 문서 KPI 정합성 중심으로 보게 만든다. |
 | [36-launch-readiness-guide.md](./36-launch-readiness-guide.md) | 베타 직전 필요한 QA, 시딩, 운영·정책, 필수 SQL 적용 체크를 한 장으로 묶은 런치 준비 설명서다. 지금 단계에서 새 기능보다 무엇을 닫아야 하는지 실무 기준으로 정리한다. |
 | [37-launch-readiness-checklist-review-brief.md](./37-launch-readiness-checklist-review-brief.md) | `36-launch-readiness-guide.md`가 현재 코드/SQL/운영 문서와 맞는지 교차검증하기 위한 최신 지시서다. QA 범위, 시딩 기준, 정책 핸드오프, 적용 SQL 목록 정합성 중심으로 보게 만든다. |
+| [38-launch-seeding-and-qa-guide.md](./38-launch-seeding-and-qa-guide.md) | 실제 verified QA 계정을 바탕으로 baseline 콘텐츠를 시딩하고, moderation까지 포함한 QA를 반복 실행하기 위한 운영 설명서다. seed/reset SQL, 실행 순서, 스모크 테스트 절차를 같이 정리한다. |
+| [39-launch-seeding-and-qa-review-brief.md](./39-launch-seeding-and-qa-review-brief.md) | `38-launch-seeding-and-qa-guide.md`와 baseline seed/reset SQL이 현재 schema와 운영 가정에 맞는지 교차검증하기 위한 최신 지시서다. |
+| [40-moderation-smoke-runbook.md](./40-moderation-smoke-runbook.md) | moderator/admin 계정으로 신고 검토, 콘텐츠 숨김, restricted/banned/restored를 실제로 반복 검증하기 위한 운영 실행 설명서다. linked report 제약, 확인 SQL, 복구 절차를 함께 담는다. |
+| [41-moderation-smoke-runbook-review-brief.md](./41-moderation-smoke-runbook-review-brief.md) | `40-moderation-smoke-runbook.md`가 현재 moderation SQL과 런치 운영 가정에 맞는지 교차검증하기 위한 최신 지시서다. |
 | [TASKS.md](../TASKS.md) | 실제 실행 체크리스트다. 오늘 할 일, 이번 주 할 일, MVP 전 필수, 출시 전 필수로 나눠 개발자가 바로 움직일 수 있게 작성했다. |
 
 ## 문서 사용 원칙

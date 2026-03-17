@@ -23,6 +23,8 @@
 - 로컬 SQL 파일은 `supabase/sql/*.sql`에 같은 내용을 유지한다.
 - SQL editor로 수동 적용할 때는 `03_create_verifications.sql -> 04_secure_profiles_and_auth_rpcs.sql -> 05 -> 06 -> 07` 순서를 유지한다.
 - 운영 DB에는 migration 또는 SQL editor 기준으로 실제 적용 이력을 남긴다.
+- QA baseline 시딩과 reset 절차는 [38-launch-seeding-and-qa-guide.md](/home/junoh/projects/campus-community/docs/38-launch-seeding-and-qa-guide.md)를 따른다.
+- launch 직전 moderation 운영 재현 절차는 [40-moderation-smoke-runbook.md](/home/junoh/projects/campus-community/docs/40-moderation-smoke-runbook.md)를 따른다.
 
 ## 2. QA 핵심 시나리오
 
@@ -122,6 +124,7 @@
 
 - 현재는 로컬 analytics buffer를 쓰므로, beta 전에는 적어도 이벤트가 저장되는지 디버그 로그와 storage 기준으로 확인한다.
 - 정식 운영 직전에는 PostHog 등 외부 도구 연결 여부를 결정한다.
+- QA baseline을 다시 맞출 때는 `reset -> seed` 순서를 기본으로 삼는다.
 
 ## 6. 런치 전 마지막 확인
 
