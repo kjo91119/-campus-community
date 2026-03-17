@@ -19,7 +19,8 @@
     "check:moderation-wiring": "node ./scripts/check-moderation-server-wiring.mjs",
     "check:analytics": "node ./scripts/check-analytics-instrumentation.mjs",
     "check:launch-seeding": "node ./scripts/check-launch-seeding-assets.mjs",
-    "check:moderation-runbook": "node ./scripts/check-moderation-runbook.mjs"
+    "check:moderation-runbook": "node ./scripts/check-moderation-runbook.mjs",
+    "check:launch-qa-sheet": "node ./scripts/check-launch-qa-execution-sheet.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

@@ -65,9 +65,11 @@ baseline 결과:
 
 | 시나리오 | 상태 | 메모 |
 | --- | --- | --- |
+| 통합 홈 비활성화 시 CTA/피드 차단 |  |  |
 | 홈 진입 |  |  |
 | 전공군 필터 전환 |  |  |
 | major board 상세 |  |  |
+| 학교 보드 same-school 접근 제한 |  |  |
 | school board 상세 |  |  |
 | 모집 탭 / 모집 상세 |  |  |
 | 일반글 작성 |  |  |
@@ -75,6 +77,8 @@ baseline 결과:
 | 모집글 작성 |  |  |
 | 일반 댓글 작성 |  |  |
 | 모집 참여 의사 댓글 작성 |  |  |
+| remote snapshot 후 stale local row 정리 |  |  |
+| fallback write 후 임시 row 정리 문구 |  |  |
 
 추가 확인:
 
@@ -93,7 +97,8 @@ baseline 결과:
 | self-report 차단 |  |  |
 | 작성자 차단 후 목록/상세 숨김 |  |  |
 | 프로필에서 차단 해제 |  |  |
-| unresolved blocked profile 해제 가능 |  |  |
+| 작성자 요약이 사라진 차단 사용자 해제 가능 |  |  |
+| 신고/차단 network 실패 시 fallback 메시지 확인 |  |  |
 
 ## 6. moderation 스모크
 
@@ -101,6 +106,7 @@ baseline 결과:
 | --- | --- | --- |
 | `report_reviewing` |  |  |
 | `content_hidden` for post |  |  |
+| linked report 자동 `resolved` 확인 |  |  |
 | `content_restored` for post |  |  |
 | `content_hidden` for comment |  |  |
 | `content_restored` for comment |  |  |
@@ -116,6 +122,7 @@ SQL 확인 메모:
 - 대상 comment id:
 - 대상 comment의 parent post id:
 - 대상 profile id:
+- linked report resolved 확인 결과:
 - `moderation_events` 확인 결과:
 - comment hide 후 `posts.comment_count` 확인 결과:
 
@@ -145,6 +152,26 @@ SQL 확인 메모:
 | `recruitment_created` |  |  |
 | `report_submitted` |  |  |
 | `user_blocked` |  |  |
+
+현재 구현 추가 이벤트:
+
+| 이벤트 / 항목 | 상태 | 메모 |
+| --- | --- | --- |
+| `manual_verification_started` |  |  |
+| `onboarding_started` |  |  |
+| `manual_verification_approved` |  |  |
+| `manual_verification_rejected` |  |  |
+| `nickname_set` |  |  |
+| `major_group_selected` |  |  |
+| `major_filter_applied` |  |  |
+| `school_board_viewed` |  |  |
+| `post_create_started` |  |  |
+| `post_opened` |  |  |
+| `recruitment_list_viewed` |  |  |
+| `recruitment_opened` |  |  |
+| `user_restricted` |  |  |
+| `user_banned` |  |  |
+| `user_unblocked` |  |  |
 
 확인 방식:
 
