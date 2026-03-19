@@ -18,7 +18,7 @@ import {
 } from '@/constants/community';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Brand, CardShadow, Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Shadow, Spacing } from '@/constants/theme';
 import { EmptyState } from '@/components/empty-state';
 import { FadeInView } from '@/components/fade-in-view';
 import { SkeletonFeed } from '@/components/skeleton';
@@ -83,37 +83,37 @@ export default function RecruitScreen() {
         ) : null}
       </Animated.View>
 
-      {/* Quick actions */}
+      {/* Quick actions — compact pills */}
       <View style={styles.quickActionRow}>
         <Pressable
+          accessibilityLabel="모집 작성"
+          accessibilityRole="button"
           style={({ pressed }) => [
-            styles.quickAction,
+            styles.quickPill,
             { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            Shadow.sm,
             pressed && { backgroundColor: colors.surfacePressed },
           ]}
           onPress={() => router.push('/(tabs)/recruit-write' as never)}>
-          <View style={[styles.quickActionIcon, { backgroundColor: Brand.primaryMuted }]}>
-            <Ionicons name="add-circle-outline" size={20} color={Brand.primary} />
+          <View style={[styles.quickPillIcon, { backgroundColor: Brand.primaryMuted }]}>
+            <Ionicons name="add-circle-outline" size={16} color={Brand.primary} />
           </View>
-          <ThemedText type="defaultSemiBold" style={{ fontSize: 14 }}>모집 작성</ThemedText>
-          <ThemedText type="caption" style={{ color: colors.textTertiary }} numberOfLines={1}>
-            스터디, 과제, 팀 프로젝트
-          </ThemedText>
+          <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>모집 작성</ThemedText>
         </Pressable>
         <Pressable
+          accessibilityLabel="내 전공 모집만 보기"
+          accessibilityRole="button"
           style={({ pressed }) => [
-            styles.quickAction,
+            styles.quickPill,
             { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            Shadow.sm,
             pressed && { backgroundColor: colors.surfacePressed },
           ]}
           onPress={() => setSelectedMajorId(profile.primaryMajorGroupId ?? 'all')}>
-          <View style={[styles.quickActionIcon, { backgroundColor: '#3B82F61A' }]}>
-            <Ionicons name="school-outline" size={20} color="#3B82F6" />
+          <View style={[styles.quickPillIcon, { backgroundColor: '#3B82F61A' }]}>
+            <Ionicons name="school-outline" size={16} color="#3B82F6" />
           </View>
-          <ThemedText type="defaultSemiBold" style={{ fontSize: 14 }}>내 전공</ThemedText>
-          <ThemedText type="caption" style={{ color: colors.textTertiary }} numberOfLines={1}>
-            {getMajorGroupById(profile.primaryMajorGroupId)?.label ?? '전공 모집만 보기'}
-          </ThemedText>
+          <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>내 전공</ThemedText>
         </Pressable>
       </View>
 
@@ -170,6 +170,12 @@ export default function RecruitScreen() {
             includeClosed && { backgroundColor: colors.chipSelectedBackground, borderColor: colors.chipSelectedBorder },
             pressed && { opacity: 0.7 },
           ]}>
+          <Ionicons
+            name={includeClosed ? 'checkmark-circle' : 'ellipse-outline'}
+            size={14}
+            color={includeClosed ? colors.chipSelectedText : colors.textSecondary}
+            style={{ marginRight: 4 }}
+          />
           <ThemedText
             type="caption"
             style={{ fontWeight: '600', color: includeClosed ? colors.chipSelectedText : colors.textSecondary }}>
@@ -179,37 +185,43 @@ export default function RecruitScreen() {
       </ThemedView>
 
       {/* List title */}
-      <View style={styles.listSection}>
-        <ThemedText type="subtitle">모집 목록</ThemedText>
+      <View style={styles.sectionTitleRow}>
+        <View style={[styles.sectionAccent, { backgroundColor: colors.tint }]} />
+        <ThemedText type="subtitle" style={{ fontSize: 16 }}>모집 목록</ThemedText>
       </View>
     </>
   ), [colors, headerOpacity, headerTranslateY, includeClosed, isReadOnly, profile.primaryMajorGroupId, router, selectedMajorId, selectedType]);
 
   const renderItem = useCallback(({ item: recruitment, index }: { item: RecruitmentCard; index: number }) => {
     const mg = getMajorGroupById(recruitment.preferredMajorGroupId);
+    const accentColor = mg?.accentColor ?? Brand.primary;
     return (
       <FadeInView delay={index * 50}>
         <Pressable
           style={({ pressed }) => [
             styles.recruitCard,
-            { backgroundColor: colors.surface, borderColor: colors.cardBorder },
-            CardShadow,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.cardBorder,
+              borderLeftColor: accentColor,
+            },
+            Shadow.sm,
             pressed && { backgroundColor: colors.surfacePressed },
           ]}
           onPress={() => router.push(`/(tabs)/recruitments/${recruitment.id}` as never)}>
-          <ThemedText type="defaultSemiBold" numberOfLines={2}>{recruitment.title}</ThemedText>
+          <ThemedText type="defaultSemiBold" style={{ fontSize: 16 }} numberOfLines={2}>{recruitment.title}</ThemedText>
           <ThemedText type="caption" style={{ color: colors.textSecondary }} numberOfLines={2}>
             {recruitment.summary}
           </ThemedText>
 
           <View style={styles.badgeRow}>
-            <View style={[styles.badge, { backgroundColor: Brand.primaryMuted }]}>
-              <ThemedText style={{ color: Brand.primary, fontSize: 11, fontWeight: '600' }}>
+            <View style={[styles.badge, { backgroundColor: Brand.primaryMuted, borderColor: Brand.primary + '40' }]}>
+              <ThemedText style={{ color: Brand.primary, fontSize: 12, fontWeight: '600' }}>
                 {RECRUITMENT_TYPE_LABELS[recruitment.recruitmentType]}
               </ThemedText>
             </View>
-            <View style={[styles.badge, { backgroundColor: Brand.successMuted }]}>
-              <ThemedText style={{ color: Brand.success, fontSize: 11, fontWeight: '600' }}>
+            <View style={[styles.badge, { backgroundColor: Brand.successMuted, borderColor: Brand.success + '40' }]}>
+              <ThemedText style={{ color: Brand.success, fontSize: 12, fontWeight: '600' }}>
                 {RECRUITMENT_STATUS_LABELS[recruitment.status]}
               </ThemedText>
             </View>
@@ -217,8 +229,8 @@ export default function RecruitScreen() {
 
           <View style={styles.metaRow}>
             {mg ? (
-              <View style={[styles.badge, { backgroundColor: mg.accentColor + '1A' }]}>
-                <ThemedText style={{ color: mg.accentColor, fontSize: 11, fontWeight: '600' }}>
+              <View style={[styles.badge, { backgroundColor: mg.accentColor + '2A', borderColor: mg.accentColor + '40' }]}>
+                <ThemedText style={{ color: mg.accentColor, fontSize: 12, fontWeight: '600' }}>
                   {mg.shortLabel ?? mg.label}
                 </ThemedText>
               </View>
@@ -322,18 +334,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: Spacing.xs,
   },
-  quickActionRow: { flexDirection: 'row', gap: Spacing.md },
-  quickAction: {
-    flex: 1,
+  quickActionRow: { flexDirection: 'row', gap: Spacing.sm },
+  quickPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.sm,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
     borderWidth: 1,
   },
-  quickActionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
+  quickPillIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -355,17 +369,29 @@ const styles = StyleSheet.create({
   chipDot: { width: 8, height: 8, borderRadius: 4 },
   toggleChip: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.pill,
     borderWidth: 1,
   },
-  listSection: { gap: Spacing.sm },
-  recruitCard: {
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.sm,
+  },
+  sectionAccent: {
+    width: 3,
+    height: 18,
+    borderRadius: 2,
+  },
+  recruitCard: {
+    gap: Spacing.md,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
     borderWidth: 1,
+    borderLeftWidth: 3,
     marginBottom: Spacing.sm,
   },
   badgeRow: {
@@ -374,9 +400,10 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   badge: {
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: Spacing.sm,
     borderRadius: Radius.sm,
+    borderWidth: 1,
   },
   metaRow: {
     flexDirection: 'row',

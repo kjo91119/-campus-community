@@ -1,5 +1,6 @@
-import { Platform, View, type ViewProps } from 'react-native';
+import { View, type ViewProps } from 'react-native';
 
+import { Shadow } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -32,20 +33,11 @@ export function ThemedView({
             : colors.background;
 
   const shadow =
-    variant === 'surface' || variant === 'elevated'
-      ? scheme === 'light'
-        ? Platform.select({
-            ios: {
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.05,
-              shadowRadius: 3,
-            },
-            android: { elevation: 1 },
-            default: {},
-          })
-        : {}
-      : {};
+    variant === 'elevated'
+      ? (scheme === 'light' ? Shadow.md : {})
+      : variant === 'surface'
+        ? (scheme === 'light' ? Shadow.sm : {})
+        : {};
 
   const borderStyle =
     variant === 'surface' || variant === 'elevated'

@@ -12,12 +12,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
 
-import { Brand, CardShadow, Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Shadow, Spacing } from '@/constants/theme';
 import { EmptyState } from '@/components/empty-state';
 import { FadeInView } from '@/components/fade-in-view';
 import { SkeletonFeed } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+
 import { useAnalytics } from '@/hooks/use-analytics';
 import { useCommunityData } from '@/hooks/use-community-data';
 import { useAppSession } from '@/hooks/use-app-session';
@@ -72,14 +72,16 @@ export default function HomeScreen() {
     hasTrackedHomeViewRef.current = true;
   }, [profile.primaryMajorGroupId, profile.primaryUniversityId, track]);
 
-  const handleSelectMajorFilter = (nextMajorId: string) => {
-    if (selectedMajorId === nextMajorId) return;
-    setSelectedMajorId(nextMajorId);
-    track('major_filter_applied', {
-      major_group: nextMajorId === 'all' ? null : nextMajorId,
-      source: 'home',
+  const handleSelectMajorFilter = useCallback((nextMajorId: string) => {
+    setSelectedMajorId((prev) => {
+      if (prev === nextMajorId) return prev;
+      track('major_filter_applied', {
+        major_group: nextMajorId === 'all' ? null : nextMajorId,
+        source: 'home',
+      });
+      return nextMajorId;
     });
-  };
+  }, [track]);
 
   const renderHeader = useCallback(() => (
     <>
@@ -95,6 +97,57 @@ export default function HomeScreen() {
           </View>
         ) : null}
       </Animated.View>
+
+      {/* Quick actions — compact pills */}
+      <View style={styles.quickActionRow}>
+        {networkBoard ? (
+          <Pressable
+            accessibilityLabel="글쓰기"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.quickPill,
+              { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+              Shadow.sm,
+              pressed && { backgroundColor: colors.surfacePressed },
+            ]}
+            onPress={() => router.push(`/(tabs)/write?boardId=${networkBoard.id}` as never)}>
+            <View style={[styles.quickPillIcon, { backgroundColor: Brand.primaryMuted }]}>
+              <Ionicons name="create-outline" size={16} color={Brand.primary} />
+            </View>
+            <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>글쓰기</ThemedText>
+          </Pressable>
+        ) : null}
+        <Pressable
+          accessibilityLabel="학교 게시판"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.quickPill,
+            { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            Shadow.sm,
+            pressed && { backgroundColor: colors.surfacePressed },
+          ]}
+          onPress={() => router.push('./school')}>
+          <View style={[styles.quickPillIcon, { backgroundColor: '#F59E0B1A' }]}>
+            <Ionicons name="school-outline" size={16} color="#F59E0B" />
+          </View>
+          <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>학교</ThemedText>
+        </Pressable>
+        <Pressable
+          accessibilityLabel="모집 탭"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.quickPill,
+            { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            Shadow.sm,
+            pressed && { backgroundColor: colors.surfacePressed },
+          ]}
+          onPress={() => router.push('./recruit')}>
+          <View style={[styles.quickPillIcon, { backgroundColor: '#3B82F61A' }]}>
+            <Ionicons name="people-outline" size={16} color="#3B82F6" />
+          </View>
+          <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>모집</ThemedText>
+        </Pressable>
+      </View>
 
       {/* Major filter */}
       <FlatList
@@ -123,48 +176,26 @@ export default function HomeScreen() {
         )}
       />
 
-      {/* Quick actions */}
-      <View style={styles.quickActionRow}>
-        {networkBoard ? (
-          <QuickActionCard
-            icon="create-outline"
-            iconBg={Brand.primaryMuted}
-            title="글쓰기"
-            subtitle="통합 홈에 글 작성"
-            colors={colors}
-            onPress={() => router.push(`/(tabs)/write?boardId=${networkBoard.id}` as never)}
-          />
-        ) : null}
-        <QuickActionCard
-          icon="school-outline"
-          iconBg="#F59E0B1A"
-          title="학교"
-          subtitle="학교 게시판 이동"
-          colors={colors}
-          onPress={() => router.push('./school')}
-        />
-      </View>
-
-      {/* Major boards */}
-      <ThemedView variant="surface" style={styles.card}>
-        <ThemedText type="sectionHeader">전공 게시판</ThemedText>
+      {/* Major boards — 2-col grid */}
+      <View>
+        <SectionTitle label="전공 게시판" colors={colors} />
         <View style={styles.boardGrid}>
           {majorBoards.length === 0 ? (
-          <EmptyState icon="grid-outline" title="게시판이 없습니다" description="아직 접근 가능한 게시판이 없습니다." />
-        ) : majorBoards.map((board) => {
+            <EmptyState icon="grid-outline" title="게시판이 없습니다" description="아직 접근 가능한 게시판이 없습니다." />
+          ) : majorBoards.map((board) => {
             const mg = getMajorGroupById(board.majorGroupId);
             return (
               <Pressable
                 key={board.id}
                 style={({ pressed }) => [
-                  styles.boardItem,
-                  { backgroundColor: colors.surfaceSecondary },
-                  CardShadow,
+                  styles.boardCard,
+                  { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+                  Shadow.sm,
                   pressed && { backgroundColor: colors.surfacePressed },
                 ]}
                 onPress={() => router.push(`/(tabs)/boards/${board.id}` as never)}>
-                <View style={[styles.boardDot, { backgroundColor: mg?.accentColor ?? Brand.primary }]} />
-                <View style={{ flex: 1 }}>
+                <View style={[styles.boardAccentBar, { backgroundColor: mg?.accentColor ?? Brand.primary }]} />
+                <View style={styles.boardCardBody}>
                   <ThemedText type="defaultSemiBold" style={{ fontSize: 14 }}>
                     {mg?.label ?? board.title}
                   </ThemedText>
@@ -172,42 +203,45 @@ export default function HomeScreen() {
                     {board.description}
                   </ThemedText>
                 </View>
-                <ThemedText style={{ color: colors.textTertiary, fontSize: 18 }}>›</ThemedText>
               </Pressable>
             );
           })}
         </View>
-      </ThemedView>
+      </View>
 
       {/* Feed title */}
-      <View style={styles.feedSection}>
-        <ThemedText type="subtitle">
-          {selectedMajorId === 'all' ? '최신 글' : `${getMajorGroupById(selectedMajorId)?.label} 글`}
-        </ThemedText>
-      </View>
+      <SectionTitle
+        label={selectedMajorId === 'all' ? '최신 글' : `${getMajorGroupById(selectedMajorId)?.label} 글`}
+        colors={colors}
+      />
     </>
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [colors, currentMajorGroup, currentUniversity, headerOpacity, headerTranslateY, isReadOnly, majorBoards, networkBoard, profile.nickname, router, selectedMajorId]);
+  ), [colors, currentMajorGroup, currentUniversity, handleSelectMajorFilter, headerOpacity, headerTranslateY, isReadOnly, majorBoards, networkBoard, profile.nickname, router, selectedMajorId]);
 
   const renderItem = useCallback(({ item: post, index }: { item: CommunityPost; index: number }) => {
     const mg = getMajorGroupById(post.majorGroupId);
+    const accentColor = mg?.accentColor ?? Brand.primary;
     return (
       <FadeInView delay={index * 50}>
         <Pressable
           style={({ pressed }) => [
             styles.feedCard,
-            { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.cardBorder,
+              borderLeftColor: accentColor,
+            },
+            Shadow.sm,
             pressed && { backgroundColor: colors.surfacePressed },
           ]}
           onPress={() => router.push(`/(tabs)/posts/${post.id}` as never)}>
-          <ThemedText type="defaultSemiBold" numberOfLines={2}>{post.title}</ThemedText>
+          <ThemedText type="defaultSemiBold" style={{ fontSize: 16 }} numberOfLines={2}>{post.title}</ThemedText>
           <ThemedText type="caption" style={{ color: colors.textSecondary }} numberOfLines={2}>
             {post.summary}
           </ThemedText>
           <View style={styles.feedMeta}>
             {mg ? (
-              <View style={[styles.metaBadge, { backgroundColor: mg.accentColor + '1A' }]}>
-                <ThemedText style={{ color: mg.accentColor, fontWeight: '600', fontSize: 11 }}>
+              <View style={[styles.metaBadge, { backgroundColor: mg.accentColor + '2A', borderColor: mg.accentColor + '40' }]}>
+                <ThemedText style={{ color: mg.accentColor, fontWeight: '600', fontSize: 12 }}>
                   {mg.shortLabel}
                 </ThemedText>
               </View>
@@ -262,6 +296,15 @@ export default function HomeScreen() {
 
 /* ─── Sub-components ─── */
 
+function SectionTitle({ label, colors }: { label: string; colors: ReturnType<typeof useThemeColors> }) {
+  return (
+    <View style={styles.sectionTitleRow}>
+      <View style={[styles.sectionAccent, { backgroundColor: colors.tint }]} />
+      <ThemedText type="subtitle" style={{ fontSize: 16 }}>{label}</ThemedText>
+    </View>
+  );
+}
+
 function FilterChip({
   label, selected, accentColor, colors, onPress,
 }: {
@@ -297,35 +340,6 @@ function FilterChip({
   );
 }
 
-function QuickActionCard({
-  icon, iconBg, title, subtitle, colors, onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  iconBg: string;
-  title: string;
-  subtitle: string;
-  colors: ReturnType<typeof useThemeColors>;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.quickAction,
-        { backgroundColor: colors.surface, borderColor: colors.cardBorder },
-        pressed && { backgroundColor: colors.surfacePressed },
-      ]}
-      onPress={onPress}>
-      <View style={[styles.quickActionIcon, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={20} color={Brand.primary} />
-      </View>
-      <ThemedText type="defaultSemiBold" style={{ fontSize: 14 }}>{title}</ThemedText>
-      <ThemedText type="caption" style={{ color: colors.textTertiary }} numberOfLines={1}>
-        {subtitle}
-      </ThemedText>
-    </Pressable>
-  );
-}
-
 /* ─── Styles ─── */
 
 const styles = StyleSheet.create({
@@ -344,6 +358,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: Spacing.xs,
   },
+  quickActionRow: { flexDirection: 'row', gap: Spacing.sm },
+  quickPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  quickPillIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   filterScroll: { marginHorizontal: -Spacing.xl, paddingHorizontal: Spacing.xl },
   filterRow: { gap: Spacing.sm },
   filterChip: {
@@ -356,41 +387,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipDot: { width: 8, height: 8, borderRadius: 4 },
-  quickActionRow: { flexDirection: 'row', gap: Spacing.md },
-  quickAction: {
-    flex: 1,
-    gap: Spacing.sm,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-  },
-  quickActionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  card: {
-    gap: Spacing.md,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-  },
-  boardGrid: { gap: Spacing.sm },
-  boardItem: {
+  sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-  },
-  boardDot: { width: 10, height: 10, borderRadius: 5 },
-  feedSection: { gap: Spacing.sm },
-  feedCard: {
     gap: Spacing.sm,
+  },
+  sectionAccent: {
+    width: 3,
+    height: 18,
+    borderRadius: 2,
+  },
+  boardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  boardCard: {
+    width: '48%',
+    flexGrow: 1,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  boardAccentBar: {
+    height: 3,
+  },
+  boardCardBody: {
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  feedCard: {
+    gap: Spacing.md,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
     borderWidth: 1,
+    borderLeftWidth: 3,
     marginBottom: Spacing.sm,
   },
   feedMeta: {
@@ -400,8 +432,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   metaBadge: {
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: Spacing.sm,
     borderRadius: Radius.sm,
+    borderWidth: 1,
   },
 });

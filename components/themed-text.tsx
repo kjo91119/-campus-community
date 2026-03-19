@@ -21,7 +21,7 @@ export function ThemedText({
     : type === 'caption' || type === 'label'
       ? colors.textSecondary
       : type === 'sectionHeader'
-        ? colors.textTertiary
+        ? colors.textSecondary
         : colors.text;
 
   return (
@@ -75,10 +75,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   sectionHeader: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

@@ -43,6 +43,7 @@ export const Colors = {
     surfaceElevated: '#FFFFFF',
     surfacePressed: '#F0F2F5',
     surfaceSecondary: '#F0F2F5',
+    surfaceTertiary: '#F7F8FA',
 
     text: '#1A1D21',
     textSecondary: '#5F6B7A',
@@ -63,6 +64,7 @@ export const Colors = {
 
     cardShadow: 'rgba(0, 0, 0, 0.06)',
     cardBorder: '#EAECF0',
+    accentBorder: '#1A8D7340',
 
     chipBackground: '#F0F2F5',
     chipSelectedBackground: Brand.primaryMuted,
@@ -92,9 +94,10 @@ export const Colors = {
     surfaceElevated: '#1C2128',
     surfacePressed: '#21262D',
     surfaceSecondary: '#21262D',
+    surfaceTertiary: '#272D36',
 
     text: '#E6EDF3',
-    textSecondary: '#8B949E',
+    textSecondary: '#94A0AC',
     textTertiary: '#636C76',
     textInverse: '#0D1117',
 
@@ -111,7 +114,8 @@ export const Colors = {
     tabBarBorder: '#30363D',
 
     cardShadow: 'rgba(0, 0, 0, 0.3)',
-    cardBorder: '#30363D',
+    cardBorder: '#333D47',
+    accentBorder: '#22B89340',
 
     chipBackground: '#21262D',
     chipSelectedBackground: '#22B89322',
@@ -215,15 +219,27 @@ export const SharedStyles = StyleSheet.create({
   },
 });
 
-/** Platform-aware shadow styles for card components */
-export const CardShadow = Platform.select({
-  ios: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-  },
-  android: { elevation: 1 },
-  web: { boxShadow: '0 1px 3px rgba(0,0,0,0.06)' },
-  default: {},
-}) as Record<string, unknown>;
+/** Multi-level platform-aware shadow system */
+export const Shadow = {
+  sm: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2 },
+    android: { elevation: 1 },
+    web: { boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+    default: {},
+  }) as Record<string, unknown>,
+  md: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+    android: { elevation: 3 },
+    web: { boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
+    default: {},
+  }) as Record<string, unknown>,
+  lg: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12 },
+    android: { elevation: 6 },
+    web: { boxShadow: '0 4px 16px rgba(0,0,0,0.12)' },
+    default: {},
+  }) as Record<string, unknown>,
+};
+
+/** @deprecated Use Shadow.md instead */
+export const CardShadow = Shadow.md;
