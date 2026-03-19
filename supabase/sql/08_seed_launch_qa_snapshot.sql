@@ -28,10 +28,10 @@ insert into temp_launch_seed_profile_map (
   major_group_id
 )
 values
-  ('yonsei_pt', 'seed-yonsei-pt@example.com', 'yonsei', 'physical-therapy'),
-  ('konyang_ot', 'seed-konyang-ot@example.com', 'konyang', 'occupational-therapy'),
-  ('daegu_rad', 'seed-daegu-rad@example.com', 'daegu-health', 'radiology'),
-  ('eulji_cp', 'seed-eulji-cp@example.com', 'eulji', 'clinical-pathology');
+  ('yonsei_pt', 'kjo931119+yonsei@gmail.com', 'yonsei', 'physical-therapy'),
+  ('konyang_ot', 'kjo931119+konyang@gmail.com', 'konyang', 'occupational-therapy'),
+  ('daegu_rad', 'kjo931119+daegu@gmail.com', 'daegu-health', 'radiology'),
+  ('eulji_cp', 'kjo931119+eulji@gmail.com', 'eulji', 'clinical-pathology');
 
 drop table if exists temp_launch_seed_profiles;
 create temporary table temp_launch_seed_profiles as
@@ -276,23 +276,23 @@ with seed_comments (
   created_at
 ) as (
   values
-    ('00000000-0000-4000-8000-000000003001'::uuid, '00000000-0000-4000-8000-000000001001'::uuid, 'konyang_ot', null, 1::smallint, '실습 첫 주에는 메모 포맷부터 맞춰 두는 게 진짜 도움됐어요.', 'general', true, '2026-03-14T10:20:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003002'::uuid, '00000000-0000-4000-8000-000000001001'::uuid, 'daegu_rad', null, 1::smallint, '준비물 체크리스트는 캡처해서 바로 써먹기 좋네요.', 'general', true, '2026-03-14T10:24:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003003'::uuid, '00000000-0000-4000-8000-000000001004'::uuid, 'eulji_cp', null, 1::smallint, '저는 표로 정리한 뒤 친구랑 문제 내는 방식이 제일 오래 갔어요.', 'general', true, '2026-03-13T20:50:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003004'::uuid, '00000000-0000-4000-8000-000000001006'::uuid, 'yonsei_pt', null, 1::smallint, '학교 실습실 예약이 되면 거기가 제일 편했고, 안 되면 스터디룸도 괜찮았습니다.', 'general', true, '2026-03-13T16:20:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003005'::uuid, '00000000-0000-4000-8000-000000001021'::uuid, 'yonsei_pt', null, 1::smallint, '작년엔 의료관 3층이었는데 이번 공지를 한 번 더 확인해야 할 것 같아요.', 'general', true, '2026-03-15T09:00:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003006'::uuid, '00000000-0000-4000-8000-000000001023'::uuid, 'konyang_ot', null, 1::smallint, '이번 학기엔 과제량이 몰리는 과목이 있어서 미리 피하는 게 좋았어요.', 'general', true, '2026-03-14T21:20:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003007'::uuid, '00000000-0000-4000-8000-000000001025'::uuid, 'daegu_rad', null, 1::smallint, '근처 맞춤집 두 군데 중엔 세탁 편한 쪽이 만족도가 높았습니다.', 'general', true, '2026-03-13T09:20:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003008'::uuid, '00000000-0000-4000-8000-000000001027'::uuid, 'eulji_cp', null, 1::smallint, '자료 담당 한 명, 발표 담당 한 명으로 나누면 훨씬 빠르더라고요.', 'general', true, '2026-03-12T15:40:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003001'::uuid, '00000000-0000-4000-8000-000000001001'::uuid, 'konyang_ot', null::uuid, 1::smallint, '실습 첫 주에는 메모 포맷부터 맞춰 두는 게 진짜 도움됐어요.', 'general', true, '2026-03-14T10:20:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003002'::uuid, '00000000-0000-4000-8000-000000001001'::uuid, 'daegu_rad', null::uuid, 1::smallint, '준비물 체크리스트는 캡처해서 바로 써먹기 좋네요.', 'general', true, '2026-03-14T10:24:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003003'::uuid, '00000000-0000-4000-8000-000000001004'::uuid, 'eulji_cp', null::uuid, 1::smallint, '저는 표로 정리한 뒤 친구랑 문제 내는 방식이 제일 오래 갔어요.', 'general', true, '2026-03-13T20:50:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003004'::uuid, '00000000-0000-4000-8000-000000001006'::uuid, 'yonsei_pt', null::uuid, 1::smallint, '학교 실습실 예약이 되면 거기가 제일 편했고, 안 되면 스터디룸도 괜찮았습니다.', 'general', true, '2026-03-13T16:20:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003005'::uuid, '00000000-0000-4000-8000-000000001021'::uuid, 'yonsei_pt', null::uuid, 1::smallint, '작년엔 의료관 3층이었는데 이번 공지를 한 번 더 확인해야 할 것 같아요.', 'general', true, '2026-03-15T09:00:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003006'::uuid, '00000000-0000-4000-8000-000000001023'::uuid, 'konyang_ot', null::uuid, 1::smallint, '이번 학기엔 과제량이 몰리는 과목이 있어서 미리 피하는 게 좋았어요.', 'general', true, '2026-03-14T21:20:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003007'::uuid, '00000000-0000-4000-8000-000000001025'::uuid, 'daegu_rad', null::uuid, 1::smallint, '근처 맞춤집 두 군데 중엔 세탁 편한 쪽이 만족도가 높았습니다.', 'general', true, '2026-03-13T09:20:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003008'::uuid, '00000000-0000-4000-8000-000000001027'::uuid, 'eulji_cp', null::uuid, 1::smallint, '자료 담당 한 명, 발표 담당 한 명으로 나누면 훨씬 빠르더라고요.', 'general', true, '2026-03-12T15:40:00+09:00'::timestamptz),
 
-    ('00000000-0000-4000-8000-000000003031'::uuid, '00000000-0000-4000-8000-000000001031'::uuid, 'konyang_ot', null, 1::smallint, '온라인이면 저녁 9시 이후로 참여 가능합니다.', 'recruitment_intent', true, '2026-03-15T08:10:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003032'::uuid, '00000000-0000-4000-8000-000000001031'::uuid, 'eulji_cp', null, 1::smallint, '케이스 발표 쪽 경험은 적지만 기록 정리는 맡을 수 있어요.', 'recruitment_intent', true, '2026-03-15T08:22:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003033'::uuid, '00000000-0000-4000-8000-000000001032'::uuid, 'yonsei_pt', null, 1::smallint, '회독 체크형 스터디 찾고 있었는데 참여하고 싶습니다.', 'recruitment_intent', true, '2026-03-14T19:30:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003034'::uuid, '00000000-0000-4000-8000-000000001033'::uuid, 'eulji_cp', null, 1::smallint, '공모전 발표 자료 파트 맡을 수 있습니다.', 'recruitment_intent', true, '2026-03-14T15:20:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003035'::uuid, '00000000-0000-4000-8000-000000001035'::uuid, 'yonsei_pt', null, 1::smallint, '실습 예습 위주라면 참여 가능합니다. 시간만 맞추면 될 것 같아요.', 'recruitment_intent', true, '2026-03-13T11:45:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003036'::uuid, '00000000-0000-4000-8000-000000001036'::uuid, 'konyang_ot', null, 1::smallint, '케이스 정리 파트 맡을 수 있습니다.', 'recruitment_intent', true, '2026-03-13T11:10:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003037'::uuid, '00000000-0000-4000-8000-000000001037'::uuid, 'daegu_rad', null, 1::smallint, '장비실 이용 가능한 요일이면 바로 합류할 수 있어요.', 'recruitment_intent', true, '2026-03-12T18:40:00+09:00'::timestamptz),
-    ('00000000-0000-4000-8000-000000003038'::uuid, '00000000-0000-4000-8000-000000001038'::uuid, 'eulji_cp', null, 1::smallint, '슬라이드 디자인보다 내용 정리 쪽에 더 자신 있습니다.', 'recruitment_intent', true, '2026-03-12T14:45:00+09:00'::timestamptz)
+    ('00000000-0000-4000-8000-000000003031'::uuid, '00000000-0000-4000-8000-000000001031'::uuid, 'konyang_ot', null::uuid, 1::smallint, '온라인이면 저녁 9시 이후로 참여 가능합니다.', 'recruitment_intent', true, '2026-03-15T08:10:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003032'::uuid, '00000000-0000-4000-8000-000000001031'::uuid, 'eulji_cp', null::uuid, 1::smallint, '케이스 발표 쪽 경험은 적지만 기록 정리는 맡을 수 있어요.', 'recruitment_intent', true, '2026-03-15T08:22:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003033'::uuid, '00000000-0000-4000-8000-000000001032'::uuid, 'yonsei_pt', null::uuid, 1::smallint, '회독 체크형 스터디 찾고 있었는데 참여하고 싶습니다.', 'recruitment_intent', true, '2026-03-14T19:30:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003034'::uuid, '00000000-0000-4000-8000-000000001033'::uuid, 'eulji_cp', null::uuid, 1::smallint, '공모전 발표 자료 파트 맡을 수 있습니다.', 'recruitment_intent', true, '2026-03-14T15:20:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003035'::uuid, '00000000-0000-4000-8000-000000001035'::uuid, 'yonsei_pt', null::uuid, 1::smallint, '실습 예습 위주라면 참여 가능합니다. 시간만 맞추면 될 것 같아요.', 'recruitment_intent', true, '2026-03-13T11:45:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003036'::uuid, '00000000-0000-4000-8000-000000001036'::uuid, 'konyang_ot', null::uuid, 1::smallint, '케이스 정리 파트 맡을 수 있습니다.', 'recruitment_intent', true, '2026-03-13T11:10:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003037'::uuid, '00000000-0000-4000-8000-000000001037'::uuid, 'daegu_rad', null::uuid, 1::smallint, '장비실 이용 가능한 요일이면 바로 합류할 수 있어요.', 'recruitment_intent', true, '2026-03-12T18:40:00+09:00'::timestamptz),
+    ('00000000-0000-4000-8000-000000003038'::uuid, '00000000-0000-4000-8000-000000001038'::uuid, 'eulji_cp', null::uuid, 1::smallint, '슬라이드 디자인보다 내용 정리 쪽에 더 자신 있습니다.', 'recruitment_intent', true, '2026-03-12T14:45:00+09:00'::timestamptz)
 )
 insert into public.comments (
   id,

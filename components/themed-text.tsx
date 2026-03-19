@@ -1,11 +1,11 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useThemeColors } from '@/hooks/use-theme-color';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
   darkColor?: string;
-  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link' | 'caption' | 'label' | 'sectionHeader';
 };
 
 export function ThemedText({
@@ -15,17 +15,20 @@ export function ThemedText({
   type = 'default',
   ...rest
 }: ThemedTextProps) {
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const colors = useThemeColors();
+  const color = lightColor || darkColor
+    ? (lightColor ?? darkColor ?? colors.text)
+    : type === 'caption' || type === 'label'
+      ? colors.textSecondary
+      : type === 'sectionHeader'
+        ? colors.textTertiary
+        : colors.text;
 
   return (
     <Text
       style={[
         { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
+        styles[type] ?? styles.default,
         style,
       ]}
       {...rest}
@@ -35,26 +38,47 @@ export function ThemedText({
 
 const styles = StyleSheet.create({
   default: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
   },
   defaultSemiBold: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: '600',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     lineHeight: 32,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 24,
+    letterSpacing: -0.2,
   },
   link: {
-    lineHeight: 30,
-    fontSize: 16,
-    color: '#0a7ea4',
+    lineHeight: 22,
+    fontSize: 15,
+    color: '#1A8D73',
+  },
+  caption: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  label: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  sectionHeader: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
 });

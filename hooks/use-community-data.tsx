@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
@@ -119,6 +121,8 @@ type AccessResult = {
 
 type CommunityContextValue = {
   isHydrating: boolean;
+  isRefreshing: boolean;
+  refresh: () => Promise<void>;
   getBoardById: (boardId?: string) => Board | undefined;
   getNetworkBoard: () => Board | undefined;
   getMajorBoards: () => Board[];
@@ -753,110 +757,115 @@ export function CommunityProvider({ children }: PropsWithChildren) {
   const [blocks, setBlocks] = useState<BlockRecord[]>([]);
   const [state, setState] = useState<CommunityState>(INITIAL_COMMUNITY_STATE);
   const [isHydrating, setIsHydrating] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const isSupabaseReady = getSupabaseBootstrap().status === 'ready_for_client_wiring';
   const currentProfileSummary = toProfileSummary(profile);
 
-  useEffect(() => {
-    let active = true;
+  const activeRef = useRef(true);
 
-    const hydrate = async () => {
-      const storedValue = await AsyncStorage.getItem(COMMUNITY_STORAGE_KEY);
-      const parsed = parseCommunityState(storedValue);
-      let nextState = parsed.state;
-      let nextBoards = parsed.boards;
-      let nextAuthorProfiles = buildPersistedAuthorProfiles({
-        currentProfileSummary,
-        existingProfiles: parsed.authorProfiles,
-      });
-      let nextReports = parsed.reports;
-      let nextBlocks = parsed.blocks;
+  const performHydrate = useCallback(async () => {
+    const storedValue = await AsyncStorage.getItem(COMMUNITY_STORAGE_KEY);
+    const parsed = parseCommunityState(storedValue);
+    let nextState = parsed.state;
+    let nextBoards = parsed.boards;
+    let nextAuthorProfiles = buildPersistedAuthorProfiles({
+      currentProfileSummary,
+      existingProfiles: parsed.authorProfiles,
+    });
+    let nextReports = parsed.reports;
+    let nextBlocks = parsed.blocks;
 
-      if (isSupabaseReady && canAccessCommunity && isAuthenticated) {
-        const [
-          remoteSnapshot,
-          remoteBoardsResult,
-          remoteReportsResult,
-          remoteBlocksResult,
-        ] = await Promise.all([
-          fetchCommunitySnapshot(),
-          listActiveBoards(),
-          listMyReports(),
-          listMyBlocks(),
-        ]);
+    if (isSupabaseReady && canAccessCommunity && isAuthenticated) {
+      const [
+        remoteSnapshot,
+        remoteBoardsResult,
+        remoteReportsResult,
+        remoteBlocksResult,
+      ] = await Promise.all([
+        fetchCommunitySnapshot(),
+        listActiveBoards(),
+        listMyReports(),
+        listMyBlocks(),
+      ]);
 
-        if (remoteSnapshot.ok && remoteSnapshot.state) {
-          nextState = buildCommunityStateAfterRemoteHydrate({
-            remoteState: remoteSnapshot.state,
-          });
-        }
+      if (remoteSnapshot.ok && remoteSnapshot.state) {
+        nextState = buildCommunityStateAfterRemoteHydrate({
+          remoteState: remoteSnapshot.state,
+        });
+      }
 
-        if (remoteBoardsResult.ok && remoteBoardsResult.boards) {
-          nextBoards = sortBoardsForDisplay(
-            remoteBoardsResult.boards.filter((board) => board.isActive)
-          );
-        }
-
-        if (remoteReportsResult.ok && remoteReportsResult.reports) {
-          nextReports = remoteReportsResult.reports;
-        }
-
-        if (remoteBlocksResult.ok && remoteBlocksResult.blocks) {
-          nextBlocks = remoteBlocksResult.blocks;
-        }
-
-        const nextAuthorProfileIds = [
-          ...new Set([
-            ...collectAuthorProfileIdsFromRows(nextState.posts, nextState.comments),
-            ...nextBlocks.map((block) => block.blockedProfileId),
-          ]),
-        ];
-
-        const remoteAuthorProfilesResult = await listProfileSummariesByIds(
-          filterUuidProfileIds(nextAuthorProfileIds)
+      if (remoteBoardsResult.ok && remoteBoardsResult.boards) {
+        nextBoards = sortBoardsForDisplay(
+          remoteBoardsResult.boards.filter((board) => board.isActive)
         );
+      }
 
-        if (remoteAuthorProfilesResult.ok && remoteAuthorProfilesResult.profiles) {
-          nextAuthorProfiles = buildAuthorProfilesAfterRemoteHydrate({
-            currentProfileSummary,
-            remoteProfiles: remoteAuthorProfilesResult.profiles,
-          });
-        } else {
-          nextAuthorProfiles = buildPersistedAuthorProfiles({
-            currentProfileSummary,
-            existingProfiles: nextAuthorProfiles,
-          });
-        }
+      if (remoteReportsResult.ok && remoteReportsResult.reports) {
+        nextReports = remoteReportsResult.reports;
+      }
+
+      if (remoteBlocksResult.ok && remoteBlocksResult.blocks) {
+        nextBlocks = remoteBlocksResult.blocks;
+      }
+
+      const nextAuthorProfileIds = [
+        ...new Set([
+          ...collectAuthorProfileIdsFromRows(nextState.posts, nextState.comments),
+          ...nextBlocks.map((block) => block.blockedProfileId),
+        ]),
+      ];
+
+      const remoteAuthorProfilesResult = await listProfileSummariesByIds(
+        filterUuidProfileIds(nextAuthorProfileIds)
+      );
+
+      if (remoteAuthorProfilesResult.ok && remoteAuthorProfilesResult.profiles) {
+        nextAuthorProfiles = buildAuthorProfilesAfterRemoteHydrate({
+          currentProfileSummary,
+          remoteProfiles: remoteAuthorProfilesResult.profiles,
+        });
       } else {
         nextAuthorProfiles = buildPersistedAuthorProfiles({
           currentProfileSummary,
           existingProfiles: nextAuthorProfiles,
         });
       }
+    } else {
+      nextAuthorProfiles = buildPersistedAuthorProfiles({
+        currentProfileSummary,
+        existingProfiles: nextAuthorProfiles,
+      });
+    }
 
-      if (!active) {
-        return;
-      }
+    if (!activeRef.current) {
+      return;
+    }
 
-      setBoards(nextBoards);
-      setAuthorProfiles(nextAuthorProfiles);
-      setReports(nextReports);
-      setBlocks(nextBlocks);
-      setState(nextState);
-      setIsHydrating(false);
-      setHasLoaded(true);
-    };
+    setBoards(nextBoards);
+    setAuthorProfiles(nextAuthorProfiles);
+    setReports(nextReports);
+    setBlocks(nextBlocks);
+    setState(nextState);
+    setIsHydrating(false);
+    setHasLoaded(true);
+  }, [canAccessCommunity, currentProfileSummary, isAuthenticated, isSupabaseReady]);
 
-    void hydrate();
+  const refresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await performHydrate();
+    setIsRefreshing(false);
+  }, [performHydrate]);
+
+  useEffect(() => {
+    activeRef.current = true;
+    void performHydrate();
 
     return () => {
-      active = false;
+      activeRef.current = false;
     };
   }, [
-    canAccessCommunity,
-    currentProfileSummary,
-    isAuthenticated,
-    isSupabaseReady,
+    performHydrate,
     profile.id,
     profile.primaryUniversityId,
   ]);
@@ -1736,6 +1745,8 @@ export function CommunityProvider({ children }: PropsWithChildren) {
     <CommunityContext.Provider
       value={{
         isHydrating,
+        isRefreshing,
+        refresh,
         getBoardById: findBoardById,
         getNetworkBoard,
         getMajorBoards,

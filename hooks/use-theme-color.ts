@@ -19,3 +19,9 @@ export function useThemeColor(
     return Colors[theme][colorName];
   }
 }
+
+/** Returns the full colour map for the current scheme. */
+export function useThemeColors() {
+  const theme = useColorScheme() ?? 'light';
+  return Colors[theme];
+}

@@ -12,6 +12,7 @@ import type {
   User,
 } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
 
 import {
   getSupabaseBootstrap,
@@ -80,6 +81,10 @@ function normalizeSchoolEmail(email: string) {
 }
 
 function buildEmailRedirectUrl() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return new URL('/', window.location.origin).toString();
+  }
+
   return Linking.createURL('/');
 }
 

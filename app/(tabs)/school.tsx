@@ -1,24 +1,35 @@
 import { useEffect, useRef } from 'react';
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
+  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Ionicons } from '@expo/vector-icons';
+
+import { Brand, Radius, Spacing } from '@/constants/theme';
+import { EmptyState } from '@/components/empty-state';
+import { SkeletonFeed } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { useCommunityData } from '@/hooks/use-community-data';
 import { useAppSession } from '@/hooks/use-app-session';
+import { useThemeColors } from '@/hooks/use-theme-color';
 import { getUniversityById } from '@/lib/community/metadata';
 
 export default function SchoolScreen() {
   const router = useRouter();
   const { track } = useAnalytics();
   const { profile, isReadOnly } = useAppSession();
-  const { getPostsByBoardId, getSchoolBoardByUniversityId, getWriteAccessForBoard, isHydrating } =
+  const { getPostsByBoardId, getSchoolBoardByUniversityId, getWriteAccessForBoard, isHydrating, isRefreshing, refresh } =
     useCommunityData();
+  const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const university = getUniversityById(profile.primaryUniversityId);
   const schoolBoard = getSchoolBoardByUniversityId(profile.primaryUniversityId);
   const schoolPosts = getPostsByBoardId(schoolBoard?.id);
@@ -38,118 +49,225 @@ export default function SchoolScreen() {
   }, [isHydrating, profile.primaryUniversityId, schoolBoard?.scopeType, track]);
 
   if (isHydrating) {
-    return null;
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}
+      >
+        <SkeletonFeed />
+      </ScrollView>
+    );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <ThemedView style={styles.hero}>
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.textTertiary} />}>
+      <ThemedView variant="surface" style={styles.card}>
         <ThemedText type="title">학교 게시판</ThemedText>
-        <ThemedText>
+        <ThemedText type="caption" style={{ color: colors.textSecondary }}>
           같은 학교 인증 사용자만 보는 제한형 게시판 골격입니다. MVP에서는 학교별 1개 보드만
           유지합니다.
         </ThemedText>
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">접근 상태</ThemedText>
-        <ThemedText>학교: {university?.name ?? '학교 미지정'}</ThemedText>
-        <ThemedText>인증 상태: {profile.verificationStatus}</ThemedText>
+      <ThemedView variant="surface" style={styles.card}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="key-outline" size={14} color={colors.textTertiary} />
+          <ThemedText type="sectionHeader">접근 상태</ThemedText>
+        </View>
+        <View style={styles.statusRow}>
+          <ThemedText type="caption" style={{ color: colors.textTertiary }}>학교</ThemedText>
+          <View style={[styles.badge, { backgroundColor: Brand.secondaryMuted }]}>
+            <ThemedText type="defaultSemiBold" style={{ color: Brand.secondary, fontSize: 13 }}>
+              {university?.name ?? '학교 미지정'}
+            </ThemedText>
+          </View>
+        </View>
+        <View style={styles.statusRow}>
+          <ThemedText type="caption" style={{ color: colors.textTertiary }}>인증 상태</ThemedText>
+          <View style={[styles.badge, { backgroundColor: Brand.successMuted }]}>
+            <ThemedText type="caption" style={{ color: Brand.success, fontSize: 12 }}>
+              {profile.verificationStatus}
+            </ThemedText>
+          </View>
+        </View>
         {isReadOnly ? (
-          <ThemedText>읽기 전용 상태에서는 학교 게시판 글쓰기도 잠깁니다.</ThemedText>
+          <View style={[styles.warningCard, { backgroundColor: colors.warningBackground, borderColor: colors.warningBorder }]}>
+            <ThemedText type="caption" style={{ color: colors.warningText }}>
+              읽기 전용 상태에서는 학교 게시판 글쓰기도 잠깁니다.
+            </ThemedText>
+          </View>
         ) : null}
-        {schoolBoard ? <ThemedText>현재 학교 보드: {schoolBoard.title}</ThemedText> : null}
+        {schoolBoard ? (
+          <View style={styles.statusRow}>
+            <ThemedText type="caption" style={{ color: colors.textTertiary }}>현재 보드</ThemedText>
+            <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>{schoolBoard.title}</ThemedText>
+          </View>
+        ) : null}
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">학교 보드 액션</ThemedText>
+      <ThemedView variant="surface" style={styles.card}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="grid-outline" size={14} color={colors.textTertiary} />
+          <ThemedText type="sectionHeader">학교 보드 액션</ThemedText>
+        </View>
         {schoolBoard ? (
           <>
             <Pressable
-              style={styles.primaryButton}
-              onPress={() => router.push(`/(tabs)/boards/${schoolBoard.id}` as never)}>
-              <ThemedText style={styles.primaryButtonText}>학교 게시판 열기</ThemedText>
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: Brand.primary, opacity: pressed ? 0.85 : 1 },
+              ]}
+              onPress={() => router.push(`/(tabs)/boards/${schoolBoard.id}` as never)}
+            >
+              <ThemedText type="defaultSemiBold" style={{ color: '#FFFFFF' }}>
+                학교 게시판 열기
+              </ThemedText>
             </Pressable>
             <Pressable
-              style={styles.secondaryButton}
-              onPress={() => router.push(`/(tabs)/write?boardId=${schoolBoard.id}` as never)}>
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                {
+                  backgroundColor: pressed ? colors.surfacePressed : colors.surfaceSecondary,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => router.push(`/(tabs)/write?boardId=${schoolBoard.id}` as never)}
+            >
               <ThemedText type="defaultSemiBold">학교 게시판에 글쓰기</ThemedText>
             </Pressable>
-            {!writeAccess.ok ? <ThemedText>{writeAccess.message}</ThemedText> : null}
+            {!writeAccess.ok ? (
+              <View style={[styles.warningCard, { backgroundColor: colors.warningBackground, borderColor: colors.warningBorder }]}>
+                <ThemedText type="caption" style={{ color: colors.warningText }}>
+                  {writeAccess.message}
+                </ThemedText>
+              </View>
+            ) : null}
           </>
         ) : (
-          <ThemedText>학교 보드 설정이 아직 없습니다.</ThemedText>
+          <EmptyState icon="school-outline" title="학교 보드가 없습니다" description="학교 보드 설정이 아직 없습니다." />
         )}
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">학교 피드</ThemedText>
-        {schoolPosts.length === 0 ? (
-          <ThemedText>
-            현재 선택한 학교 게시판에는 글이 없습니다. 첫 글을 올려 같은 학교 흐름을 확인해 보세요.
-          </ThemedText>
-        ) : (
-          schoolPosts.map((post) => (
-            <Pressable
-              key={post.id}
-              style={styles.listItem}
-              onPress={() =>
-                router.push(
-                  post.recruitmentId
-                    ? (`/(tabs)/recruitments/${post.recruitmentId}` as never)
-                    : (`/(tabs)/posts/${post.id}` as never)
-                )
-              }>
-              <ThemedText type="defaultSemiBold">{post.title}</ThemedText>
-              <ThemedText>{post.summary}</ThemedText>
-              <ThemedText>
-                댓글 {post.commentCount} · {post.createdLabel}
+      <View style={styles.sectionTitleRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="newspaper-outline" size={14} color={colors.textTertiary} />
+          <ThemedText type="sectionHeader">학교 피드</ThemedText>
+        </View>
+        <ThemedText type="caption" style={{ color: colors.textTertiary }}>
+          {schoolPosts.length}건
+        </ThemedText>
+      </View>
+
+      {schoolPosts.length === 0 ? (
+        <EmptyState icon="document-text-outline" title="아직 글이 없습니다" description="첫 글을 올려 같은 학교 흐름을 확인해 보세요." />
+      ) : (
+        schoolPosts.map((post) => (
+          <Pressable
+            key={post.id}
+            style={({ pressed }) => [
+              styles.listCard,
+              {
+                backgroundColor: pressed ? colors.surfacePressed : colors.surface,
+                borderColor: colors.cardBorder,
+              },
+            ]}
+            onPress={() =>
+              router.push(
+                post.recruitmentId
+                  ? (`/(tabs)/recruitments/${post.recruitmentId}` as never)
+                  : (`/(tabs)/posts/${post.id}` as never)
+              )
+            }
+          >
+            <ThemedText type="defaultSemiBold">{post.title}</ThemedText>
+            <ThemedText type="caption" style={{ color: colors.textSecondary }} numberOfLines={2}>
+              {post.summary}
+            </ThemedText>
+            <View style={styles.listCardFooter}>
+              <View style={[styles.badge, { backgroundColor: Brand.primaryMuted }]}>
+                <ThemedText type="caption" style={{ color: Brand.primary, fontSize: 11 }}>
+                  댓글 {post.commentCount}
+                </ThemedText>
+              </View>
+              <ThemedText type="caption" style={{ color: colors.textTertiary }}>
+                {post.createdLabel}
               </ThemedText>
-            </Pressable>
-          ))
-        )}
-      </ThemedView>
+            </View>
+          </Pressable>
+        ))
+      )}
+
+      <View style={{ height: Spacing.xxxl }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    padding: 20,
-    gap: 16,
-  },
-  hero: {
-    gap: 10,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: 'rgba(170, 107, 45, 0.12)',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
+    gap: Spacing.md,
   },
   card: {
-    gap: 10,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  warningCard: {
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   primaryButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    backgroundColor: '#1E5FAF',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
   },
   secondaryButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    alignItems: 'center',
   },
-  listItem: {
-    gap: 6,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0, 0, 0, 0.10)',
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  emptyState: {
+    padding: Spacing.xxxl,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listCard: {
+    gap: Spacing.sm,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  badge: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.sm,
+  },
+  listCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
   },
 });

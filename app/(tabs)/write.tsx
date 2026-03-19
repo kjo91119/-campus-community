@@ -1,22 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
+  View,
+  type TextInput as TextInputType,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   COMMUNITY_VALIDATION,
   POST_CATEGORY_OPTIONS,
   POST_TYPE_OPTIONS,
 } from '@/constants/community';
+import { Brand, Radius, Spacing } from '@/constants/theme';
+import { SkeletonDetail } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { useCommunityData } from '@/hooks/use-community-data';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useThemeColors } from '@/hooks/use-theme-color';
 import { getMajorGroupById, getUniversityById } from '@/lib/community/metadata';
 import type {
   PostCategory,
@@ -39,12 +45,14 @@ export default function WriteScreen() {
   const [postType, setPostType] = useState<Exclude<PostType, 'recruitment'>>('general');
   const [feedback, setFeedback] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const borderColor = useThemeColor({}, 'icon');
-  const textColor = useThemeColor({}, 'text');
+  const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const board = getBoardById(boardId);
   const writeAccess = getWriteAccessForBoard(boardId);
   const university = getUniversityById(board?.universityId);
   const majorGroup = getMajorGroupById(board?.majorGroupId);
+  const titleRef = useRef<TextInputType>(null);
+  const bodyRef = useRef<TextInputType>(null);
   const hasTrackedCreateStartRef = useRef(false);
 
   useEffect(() => {
@@ -61,17 +69,29 @@ export default function WriteScreen() {
   }, [board, track]);
 
   if (isHydrating) {
-    return null;
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}>
+        <SkeletonDetail />
+      </ScrollView>
+    );
   }
 
   if (!board) {
     return (
-      <ThemedView style={styles.fallback}>
+      <View style={[styles.fallback, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.lg }]}>
         <ThemedText type="title">게시판을 찾을 수 없습니다.</ThemedText>
-        <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+            pressed && { opacity: 0.85 },
+          ]}
+          onPress={() => router.back()}>
           <ThemedText type="defaultSemiBold">이전 화면으로 돌아가기</ThemedText>
         </Pressable>
-      </ThemedView>
+      </View>
     );
   }
 
@@ -95,18 +115,30 @@ export default function WriteScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <ThemedView style={styles.hero}>
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled">
+      {/* Header */}
+      <ThemedView variant="surface" style={styles.card}>
         <ThemedText type="title">글쓰기</ThemedText>
         <ThemedText>{board.title}</ThemedText>
-        {majorGroup ? <ThemedText>전공군: {majorGroup.label}</ThemedText> : null}
-        {university ? <ThemedText>학교: {university.name}</ThemedText> : null}
-        {!writeAccess.ok ? <ThemedText>{writeAccess.message}</ThemedText> : null}
+        {majorGroup ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>전공군: {majorGroup.label}</ThemedText>
+        ) : null}
+        {university ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>학교: {university.name}</ThemedText>
+        ) : null}
+        {!writeAccess.ok ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>{writeAccess.message}</ThemedText>
+        ) : null}
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">글 유형</ThemedText>
-        <ThemedView style={styles.optionRow}>
+      {/* Post type */}
+      <ThemedView variant="surface" style={styles.card}>
+        <ThemedText type="sectionHeader">글 유형</ThemedText>
+        <View style={styles.optionRow}>
           {POST_TYPE_OPTIONS.map((option) => {
             const selected = option.value === postType;
 
@@ -115,17 +147,38 @@ export default function WriteScreen() {
                 key={option.value}
                 disabled={!writeAccess.ok}
                 onPress={() => setPostType(option.value)}
-                style={[styles.choice, selected && styles.selectedChoice]}>
-                <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
+                style={({ pressed }) => [
+                  styles.chip,
+                  {
+                    backgroundColor: colors.chipBackground,
+                    borderColor: colors.chipBorder,
+                  },
+                  selected && {
+                    backgroundColor: colors.chipSelectedBackground,
+                    borderColor: colors.chipSelectedBorder,
+                  },
+                  !writeAccess.ok && { opacity: 0.5 },
+                  pressed && { opacity: 0.7 },
+                ]}>
+                <ThemedText
+                  type="caption"
+                  style={
+                    selected
+                      ? { color: colors.chipSelectedText, fontWeight: '600' }
+                      : { color: colors.text, fontWeight: '600' }
+                  }>
+                  {option.label}
+                </ThemedText>
               </Pressable>
             );
           })}
-        </ThemedView>
+        </View>
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">카테고리</ThemedText>
-        <ThemedView style={styles.optionRow}>
+      {/* Category */}
+      <ThemedView variant="surface" style={styles.card}>
+        <ThemedText type="sectionHeader">카테고리</ThemedText>
+        <View style={styles.optionRow}>
           {POST_CATEGORY_OPTIONS.map((option) => {
             const selected = option.value === category;
 
@@ -134,42 +187,98 @@ export default function WriteScreen() {
                 key={option.value}
                 disabled={!writeAccess.ok}
                 onPress={() => setCategory(option.value)}
-                style={[styles.choice, selected && styles.selectedChoice]}>
-                <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
+                style={({ pressed }) => [
+                  styles.chip,
+                  {
+                    backgroundColor: colors.chipBackground,
+                    borderColor: colors.chipBorder,
+                  },
+                  selected && {
+                    backgroundColor: colors.chipSelectedBackground,
+                    borderColor: colors.chipSelectedBorder,
+                  },
+                  !writeAccess.ok && { opacity: 0.5 },
+                  pressed && { opacity: 0.7 },
+                ]}>
+                <ThemedText
+                  type="caption"
+                  style={
+                    selected
+                      ? { color: colors.chipSelectedText, fontWeight: '600' }
+                      : { color: colors.text, fontWeight: '600' }
+                  }>
+                  {option.label}
+                </ThemedText>
               </Pressable>
             );
           })}
-        </ThemedView>
+        </View>
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">본문 입력</ThemedText>
+      {/* Body input */}
+      <ThemedView variant="surface" style={styles.card}>
+        <ThemedText type="sectionHeader">본문 입력</ThemedText>
         <TextInput
+          ref={titleRef}
+          autoFocus
           editable={writeAccess.ok && !isSubmitting}
           maxLength={80}
           onChangeText={setTitle}
+          onSubmitEditing={() => bodyRef.current?.focus()}
           placeholder={`제목은 ${COMMUNITY_VALIDATION.titleMinLength}자 이상 입력해 주세요.`}
-          placeholderTextColor={borderColor}
-          style={[styles.input, { borderColor, color: textColor }]}
+          placeholderTextColor={colors.inputPlaceholder}
+          returnKeyType="next"
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.inputBackground,
+              borderColor: colors.inputBorder,
+              color: colors.text,
+            },
+          ]}
           value={title}
         />
+        <ThemedText type="caption" style={{ color: title.length >= 70 ? Brand.primary : colors.textTertiary, alignSelf: 'flex-end' }}>
+          {title.length}/80
+        </ThemedText>
         <TextInput
+          ref={bodyRef}
           editable={writeAccess.ok && !isSubmitting}
           multiline
           onChangeText={setBody}
           placeholder={`본문은 ${COMMUNITY_VALIDATION.bodyMinLength}자 이상 입력해 주세요.`}
-          placeholderTextColor={borderColor}
-          style={[styles.textarea, { borderColor, color: textColor }]}
+          placeholderTextColor={colors.inputPlaceholder}
+          style={[
+            styles.textarea,
+            {
+              backgroundColor: colors.inputBackground,
+              borderColor: colors.inputBorder,
+              color: colors.text,
+            },
+          ]}
           value={body}
         />
-        {feedback ? <ThemedText>{feedback}</ThemedText> : null}
+        <ThemedText type="caption" style={{ color: colors.textTertiary, alignSelf: 'flex-end' }}>
+          {body.length}자
+        </ThemedText>
+        {feedback ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>{feedback}</ThemedText>
+        ) : null}
         <Pressable
+          accessibilityLabel="게시글 등록"
+          accessibilityRole="button"
           disabled={!writeAccess.ok || isSubmitting}
-          style={[styles.primaryButton, (!writeAccess.ok || isSubmitting) && styles.disabledButton]}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            (!writeAccess.ok || isSubmitting) && styles.disabledButton,
+            pressed && { opacity: 0.85 },
+          ]}
           onPress={() => void handleSubmit()}>
-          <ThemedText style={styles.primaryButtonText}>
-            {isSubmitting ? '등록 중...' : '게시글 등록'}
-          </ThemedText>
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <ThemedText style={styles.primaryButtonText}>게시글 등록</ThemedText>
+          )}
         </Pressable>
       </ThemedView>
     </ScrollView>
@@ -178,74 +287,69 @@ export default function WriteScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    padding: 20,
-    gap: 16,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
+    gap: Spacing.lg,
   },
   fallback: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
-    gap: 16,
-  },
-  hero: {
-    gap: 8,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: 'rgba(170, 107, 45, 0.12)',
+    alignItems: 'center',
+    padding: Spacing.xxl,
+    gap: Spacing.lg,
   },
   card: {
-    gap: 12,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
   },
   optionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: Spacing.sm,
   },
-  choice: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
-  },
-  selectedChoice: {
-    backgroundColor: 'rgba(30, 95, 175, 0.14)',
+  chip: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
   },
   input: {
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    fontSize: 15,
   },
   textarea: {
     minHeight: 180,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    fontSize: 15,
     textAlignVertical: 'top',
   },
   primaryButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    backgroundColor: '#1E5FAF',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Brand.primary,
+    alignItems: 'center',
   },
   primaryButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
+    fontSize: 15,
   },
   disabledButton: {
     opacity: 0.5,
   },
   secondaryButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    alignItems: 'center',
   },
 });

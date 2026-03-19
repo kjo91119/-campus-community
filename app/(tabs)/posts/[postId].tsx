@@ -1,23 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput,
+  View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Ionicons } from '@expo/vector-icons';
 
 import {
   POST_CATEGORY_LABELS,
   POST_TYPE_LABELS,
   REPORT_REASON_OPTIONS,
 } from '@/constants/community';
+import { Brand, Radius, Spacing } from '@/constants/theme';
+import { EmptyState } from '@/components/empty-state';
+import { SkeletonDetail } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useCommunityData } from '@/hooks/use-community-data';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useThemeColors } from '@/hooks/use-theme-color';
 import { getMajorGroupById, getUniversityById } from '@/lib/community/metadata';
 import type { ReportReason } from '@/types/domain';
 
@@ -41,6 +50,8 @@ export default function PostDetailScreen() {
     getReadAccessForPost,
     isBlockedProfile,
     isHydrating,
+    isRefreshing,
+    refresh,
     reportTarget,
     unblockProfile,
   } = useCommunityData();
@@ -48,8 +59,8 @@ export default function PostDetailScreen() {
   const [selectedReason, setSelectedReason] = useState<ReportReason>(REPORT_REASON_OPTIONS[0]!.value);
   const [feedback, setFeedback] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const borderColor = useThemeColor({}, 'icon');
-  const textColor = useThemeColor({}, 'text');
+  const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const readAccess = getReadAccessForPost(postId);
   const post = getPostById(postId);
   const comments = getCommentsByPostId(postId);
@@ -79,29 +90,47 @@ export default function PostDetailScreen() {
   }, [board?.scopeType, post, track]);
 
   if (isHydrating) {
-    return null;
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}>
+        <SkeletonDetail />
+      </ScrollView>
+    );
   }
 
   if (!readAccess.ok && readAccess.message !== '게시글을 찾을 수 없습니다.') {
     return (
-      <ThemedView style={styles.fallback}>
+      <View style={[styles.fallback, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.lg }]}>
         <ThemedText type="title">이 게시글은 볼 수 없습니다.</ThemedText>
-        <ThemedText>{readAccess.message}</ThemedText>
-        <Pressable style={styles.secondaryButton} onPress={() => router.replace('/(tabs)' as never)}>
+        <ThemedText style={{ color: colors.textSecondary }}>{readAccess.message}</ThemedText>
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+            pressed && { opacity: 0.85 },
+          ]}
+          onPress={() => router.replace('/(tabs)' as never)}>
           <ThemedText type="defaultSemiBold">홈으로 돌아가기</ThemedText>
         </Pressable>
-      </ThemedView>
+      </View>
     );
   }
 
   if (!post) {
     return (
-      <ThemedView style={styles.fallback}>
+      <View style={[styles.fallback, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.lg }]}>
         <ThemedText type="title">게시글을 찾을 수 없습니다.</ThemedText>
-        <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+            pressed && { opacity: 0.85 },
+          ]}
+          onPress={() => router.back()}>
           <ThemedText type="defaultSemiBold">이전 화면으로 돌아가기</ThemedText>
         </Pressable>
-      </ThemedView>
+      </View>
     );
   }
 
@@ -193,61 +222,129 @@ export default function PostDetailScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <ThemedView style={styles.hero}>
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.textTertiary} />}>
+      {/* Hero card */}
+      <ThemedView variant="surface" style={styles.card}>
         <ThemedText type="title">{post.title}</ThemedText>
         <ThemedText>{post.body}</ThemedText>
-        <ThemedText>
-          {POST_TYPE_LABELS[post.postType as keyof typeof POST_TYPE_LABELS] ?? post.postType} ·{' '}
-          {POST_CATEGORY_LABELS[post.category as keyof typeof POST_CATEGORY_LABELS] ?? post.category}
+
+        <View style={styles.badgeRow}>
+          <View style={[styles.badge, { backgroundColor: Brand.primaryMuted }]}>
+            <ThemedText type="caption" style={{ color: Brand.primary }}>
+              {POST_TYPE_LABELS[post.postType as keyof typeof POST_TYPE_LABELS] ?? post.postType}
+            </ThemedText>
+          </View>
+          <View style={[styles.badge, { backgroundColor: Brand.secondaryMuted }]}>
+            <ThemedText type="caption" style={{ color: Brand.secondary }}>
+              {POST_CATEGORY_LABELS[post.category as keyof typeof POST_CATEGORY_LABELS] ?? post.category}
+            </ThemedText>
+          </View>
+        </View>
+
+        {board ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>게시판: {board.title}</ThemedText>
+        ) : null}
+        {majorGroup ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>전공군: {majorGroup.label}</ThemedText>
+        ) : null}
+        {university ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>학교: {university.name}</ThemedText>
+        ) : null}
+        <ThemedText type="caption" style={{ color: colors.textTertiary }}>
+          댓글 {post.commentCount} · {post.createdLabel}
         </ThemedText>
-        {board ? <ThemedText>게시판: {board.title}</ThemedText> : null}
-        {majorGroup ? <ThemedText>전공군: {majorGroup.label}</ThemedText> : null}
-        {university ? <ThemedText>학교: {university.name}</ThemedText> : null}
-        <ThemedText>댓글 {post.commentCount} · {post.createdLabel}</ThemedText>
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">작성자 정보</ThemedText>
+      {/* Author info */}
+      <ThemedView variant="surface" style={styles.card}>
+        <ThemedText type="sectionHeader">작성자 정보</ThemedText>
         {post.isAnonymous ? (
-          <ThemedText>익명 작성글이라 작성자 요약 정보는 공개되지 않습니다.</ThemedText>
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>
+            익명 작성글이라 작성자 요약 정보는 공개되지 않습니다.
+          </ThemedText>
         ) : (
           <>
             <ThemedText>닉네임: {post.authorNickname}</ThemedText>
-            {authorMajorGroup ? <ThemedText>전공군: {authorMajorGroup.label}</ThemedText> : null}
-            {authorUniversity ? <ThemedText>학교: {authorUniversity.name}</ThemedText> : null}
+            {authorMajorGroup ? (
+              <ThemedText type="caption" style={{ color: colors.textSecondary }}>전공군: {authorMajorGroup.label}</ThemedText>
+            ) : null}
+            {authorUniversity ? (
+              <ThemedText type="caption" style={{ color: colors.textSecondary }}>학교: {authorUniversity.name}</ThemedText>
+            ) : null}
           </>
         )}
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">신고 / 차단</ThemedText>
-        <ThemedText>사유를 고른 뒤 게시글이나 작성자를 신고하고, 필요하면 바로 차단할 수 있습니다.</ThemedText>
-        <ThemedView style={styles.reasonRow}>
+      {/* Report / Block */}
+      <ThemedView variant="surface" style={styles.card}>
+        <ThemedText type="sectionHeader">신고 / 차단</ThemedText>
+        <ThemedText type="caption" style={{ color: colors.textSecondary }}>
+          사유를 고른 뒤 게시글이나 작성자를 신고하고, 필요하면 바로 차단할 수 있습니다.
+        </ThemedText>
+        <View style={styles.reasonRow}>
           {REPORT_REASON_OPTIONS.map((option) => (
             <Pressable
               key={option.value}
-              style={[
+              style={({ pressed }) => [
                 styles.reasonChip,
-                selectedReason === option.value && styles.reasonChipSelected,
+                {
+                  backgroundColor: colors.chipBackground,
+                  borderColor: colors.chipBorder,
+                },
+                selectedReason === option.value && {
+                  backgroundColor: colors.chipSelectedBackground,
+                  borderColor: colors.chipSelectedBorder,
+                },
+                pressed && { opacity: 0.7 },
               ]}
               onPress={() => setSelectedReason(option.value)}>
-              <ThemedText type="defaultSemiBold">{option.label}</ThemedText>
+              <ThemedText
+                type="caption"
+                style={
+                  selectedReason === option.value
+                    ? { color: colors.chipSelectedText, fontWeight: '600' }
+                    : { color: colors.text, fontWeight: '600' }
+                }>
+                {option.label}
+              </ThemedText>
             </Pressable>
           ))}
-        </ThemedView>
-        <Pressable style={styles.secondaryButton} onPress={() => void handleReportPost()}>
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+            pressed && { opacity: 0.85 },
+          ]}
+          onPress={() => void handleReportPost()}>
           <ThemedText type="defaultSemiBold">게시글 신고</ThemedText>
         </Pressable>
         {isOwnPost ? (
-          <ThemedText>내 글은 별도 신고/차단 대상에서 제외됩니다.</ThemedText>
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>
+            내 글은 별도 신고/차단 대상에서 제외됩니다.
+          </ThemedText>
         ) : (
           <>
-            <Pressable style={styles.secondaryButton} onPress={() => void handleReportAuthor()}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={() => void handleReportAuthor()}>
               <ThemedText type="defaultSemiBold">작성자 신고</ThemedText>
             </Pressable>
             <Pressable
-              style={styles.secondaryButton}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+                pressed && { opacity: 0.85 },
+              ]}
               onPress={() => void handleToggleAuthorBlock(post.authorProfileId)}>
               <ThemedText type="defaultSemiBold">
                 {isAuthorBlocked ? '작성자 차단 해제' : '작성자 차단'}
@@ -255,60 +352,100 @@ export default function PostDetailScreen() {
             </Pressable>
           </>
         )}
-        {feedback ? <ThemedText>{feedback}</ThemedText> : null}
+        {feedback ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>{feedback}</ThemedText>
+        ) : null}
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">댓글</ThemedText>
+      {/* Comments */}
+      <ThemedView variant="surface" style={styles.card}>
+        <ThemedText type="sectionHeader">댓글</ThemedText>
         {comments.length === 0 ? (
-          <ThemedText>아직 댓글이 없습니다. 첫 댓글로 흐름을 확인해 보세요.</ThemedText>
+          <EmptyState icon="chatbubbles-outline" title="아직 댓글이 없습니다" description="첫 댓글을 남겨 대화를 시작해 보세요." />
         ) : (
-          comments.map((comment) => (
-            <ThemedView
+          comments.map((comment, index) => (
+            <View
               key={comment.id}
-              style={[styles.commentItem, comment.depth === 2 && styles.replyItem]}>
+              style={[
+                styles.commentItem,
+                comment.depth === 2 && [styles.replyItem, { borderLeftColor: colors.border }],
+                index < comments.length - 1 && [styles.commentSeparator, { borderBottomColor: colors.border }],
+              ]}>
               <ThemedText type="defaultSemiBold">
                 {comment.isAnonymous ? '익명' : comment.authorNickname}
               </ThemedText>
               <ThemedText>{comment.body}</ThemedText>
-              <ThemedText>{comment.createdLabel}</ThemedText>
+              <ThemedText type="caption" style={{ color: colors.textTertiary }}>
+                {comment.createdLabel}
+              </ThemedText>
               {comment.authorProfileId !== profile.id ? (
-                <ThemedView style={styles.inlineActions}>
-                  <Pressable onPress={() => void handleReportComment(comment.id, comment.authorProfileId)}>
-                    <ThemedText type="defaultSemiBold">댓글 신고</ThemedText>
+                <View style={styles.inlineActions}>
+                  <Pressable
+                    accessibilityLabel="댓글 신고"
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.inlineActionButton, pressed && { opacity: 0.5 }]}
+                    onPress={() => void handleReportComment(comment.id, comment.authorProfileId)}>
+                    <Ionicons name="flag-outline" size={12} color={colors.textTertiary} />
+                    <ThemedText type="caption" style={{ color: colors.textTertiary }}>댓글 신고</ThemedText>
                   </Pressable>
-                  <Pressable onPress={() => void handleBlockCommentAuthor(comment.authorProfileId)}>
-                    <ThemedText type="defaultSemiBold">
+                  <Pressable
+                    accessibilityLabel={isBlockedProfile(comment.authorProfileId) ? '작성자 차단 해제' : '작성자 차단'}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.inlineActionButton, pressed && { opacity: 0.5 }]}
+                    onPress={() => void handleBlockCommentAuthor(comment.authorProfileId)}>
+                    <Ionicons name="ban-outline" size={12} color={colors.textTertiary} />
+                    <ThemedText type="caption" style={{ color: colors.textTertiary }}>
                       {isBlockedProfile(comment.authorProfileId) ? '작성자 차단 해제' : '작성자 차단'}
                     </ThemedText>
                   </Pressable>
-                </ThemedView>
+                </View>
               ) : null}
-            </ThemedView>
+            </View>
           ))
         )}
       </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">댓글 작성</ThemedText>
-        {!commentAccess.ok ? <ThemedText>{commentAccess.message}</ThemedText> : null}
+      {/* Comment form */}
+      <ThemedView variant="surface" style={styles.card}>
+        <ThemedText type="sectionHeader">댓글 작성</ThemedText>
+        {!commentAccess.ok ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>{commentAccess.message}</ThemedText>
+        ) : null}
         <TextInput
           editable={commentAccess.ok && !isSubmitting}
           multiline
           onChangeText={setCommentBody}
           placeholder="댓글을 입력해 주세요."
-          placeholderTextColor={borderColor}
-          style={[styles.input, { borderColor, color: textColor }]}
+          placeholderTextColor={colors.inputPlaceholder}
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.inputBackground,
+              borderColor: colors.inputBorder,
+              color: colors.text,
+            },
+          ]}
           value={commentBody}
         />
-        {feedback ? <ThemedText>{feedback}</ThemedText> : null}
+        <ThemedText type="caption" style={{ color: colors.textTertiary, alignSelf: 'flex-end' }}>
+          {commentBody.length}자
+        </ThemedText>
+        {feedback ? (
+          <ThemedText type="caption" style={{ color: colors.textSecondary }}>{feedback}</ThemedText>
+        ) : null}
         <Pressable
           disabled={!commentAccess.ok || isSubmitting}
-          style={[styles.primaryButton, (!commentAccess.ok || isSubmitting) && styles.disabledButton]}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            (!commentAccess.ok || isSubmitting) && styles.disabledButton,
+            pressed && { opacity: 0.85 },
+          ]}
           onPress={() => void handleSubmit()}>
-          <ThemedText style={styles.primaryButtonText}>
-            {isSubmitting ? '등록 중...' : '댓글 등록'}
-          </ThemedText>
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <ThemedText style={styles.primaryButtonText}>댓글 등록</ThemedText>
+          )}
         </Pressable>
       </ThemedView>
     </ScrollView>
@@ -317,82 +454,98 @@ export default function PostDetailScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    padding: 20,
-    gap: 16,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
+    gap: Spacing.lg,
   },
   fallback: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
-    gap: 16,
-  },
-  hero: {
-    gap: 8,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: 'rgba(44, 154, 122, 0.12)',
+    alignItems: 'center',
+    padding: Spacing.xxl,
+    gap: Spacing.lg,
   },
   card: {
-    gap: 10,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  badge: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.sm,
   },
   commentItem: {
-    gap: 4,
-    paddingVertical: 12,
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+  },
+  commentSeparator: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0, 0, 0, 0.10)',
+  },
+  replyItem: {
+    marginLeft: Spacing.xl,
+    paddingLeft: Spacing.lg,
+    borderLeftWidth: 2,
   },
   reasonRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Spacing.sm,
   },
   reasonChip: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
-  },
-  reasonChipSelected: {
-    backgroundColor: 'rgba(30, 95, 175, 0.16)',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
   },
   inlineActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    paddingTop: 6,
+    gap: Spacing.md,
+    paddingTop: Spacing.xs,
   },
-  replyItem: {
-    paddingLeft: 16,
+  inlineActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   input: {
     minHeight: 110,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    fontSize: 15,
     textAlignVertical: 'top',
   },
   primaryButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    backgroundColor: '#1E5FAF',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Brand.primary,
+    alignItems: 'center',
   },
   primaryButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
+    fontSize: 15,
   },
   disabledButton: {
     opacity: 0.5,
   },
   secondaryButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    alignItems: 'center',
   },
 });
