@@ -30,22 +30,15 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.tabIconDefault,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: colors.tabBar,
           borderTopColor: colors.tabBarBorder,
           borderTopWidth: StyleSheet.hairlineWidth,
-          height: Platform.select({ ios: 88, default: 64 }),
-          paddingBottom: Platform.select({ ios: 28, default: 8 }),
-          paddingTop: 8,
+          height: Platform.select({ ios: 78, default: 56 }),
+          paddingBottom: Platform.select({ ios: 24, default: 4 }),
+          paddingTop: 4,
           ...Shadow.lg,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          letterSpacing: 0.1,
-        },
-        tabBarIconStyle: {
-          marginBottom: -2,
         },
       }}>
       <Tabs.Screen

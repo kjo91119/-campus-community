@@ -109,7 +109,7 @@ export default function RecruitScreen() {
           ]}
           onPress={() => router.push('/(tabs)/recruit-write' as never)}>
           <View style={[styles.quickPillIcon, { backgroundColor: Brand.primaryMuted }]}>
-            <Ionicons name="add-circle-outline" size={16} color={Brand.primary} />
+            <Ionicons name="add-circle-outline" size={18} color={Brand.primary} />
           </View>
           <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>모집 작성</ThemedText>
         </Pressable>
@@ -124,7 +124,7 @@ export default function RecruitScreen() {
           ]}
           onPress={() => setSelectedMajorId(profile.primaryMajorGroupId ?? 'all')}>
           <View style={[styles.quickPillIcon, { backgroundColor: '#3B82F61A' }]}>
-            <Ionicons name="school-outline" size={16} color="#3B82F6" />
+            <Ionicons name="school-outline" size={18} color="#3B82F6" />
           </View>
           <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>내 전공</ThemedText>
         </Pressable>
@@ -345,9 +345,9 @@ function FilterChip({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: {
-    padding: Spacing.xl,
+    padding: Spacing.lg,
     paddingBottom: Spacing.xxxl,
-    gap: Spacing.lg,
+    gap: Spacing.md,
   },
   headerSection: { gap: Spacing.xs },
   statusBadge: {
@@ -360,18 +360,20 @@ const styles = StyleSheet.create({
   },
   quickActionRow: { flexDirection: 'row', gap: Spacing.sm },
   quickPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.md,
     borderWidth: 1,
   },
   quickPillIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },

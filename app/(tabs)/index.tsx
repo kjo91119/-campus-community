@@ -98,17 +98,23 @@ export default function HomeScreen() {
 
   const renderHeader = useCallback(() => (
     <>
-      {/* Welcome */}
+      {/* Welcome — compact */}
       <Animated.View style={[styles.welcomeSection, { opacity: headerOpacity, transform: [{ translateY: headerTranslateY }] }]}>
-        <ThemedText type="caption" style={{ color: colors.textTertiary }}>
-          {currentUniversity?.name ?? '학교 미지정'} · {currentMajorGroup?.label ?? '전공군 미선택'}
-        </ThemedText>
-        <ThemedText type="title">안녕하세요, {profile.nickname} 님</ThemedText>
-        {isReadOnly ? (
-          <View style={[styles.statusBadge, { backgroundColor: colors.warningBackground, borderColor: colors.warningBorder }]}>
-            <ThemedText type="caption" style={{ color: colors.warningText }}>읽기 전용</ThemedText>
+        <View style={styles.welcomeRow}>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="subtitle" numberOfLines={1}>
+              {profile.nickname} 님
+            </ThemedText>
+            <ThemedText type="caption" style={{ color: colors.textTertiary }}>
+              {currentUniversity?.name ?? '학교 미지정'} · {currentMajorGroup?.label ?? '전공군 미선택'}
+            </ThemedText>
           </View>
-        ) : null}
+          {isReadOnly ? (
+            <View style={[styles.statusBadge, { backgroundColor: colors.warningBackground, borderColor: colors.warningBorder }]}>
+              <ThemedText type="caption" style={{ color: colors.warningText }}>읽기 전용</ThemedText>
+            </View>
+          ) : null}
+        </View>
       </Animated.View>
 
       {/* Quick actions — compact pills */}
@@ -125,7 +131,7 @@ export default function HomeScreen() {
             ]}
             onPress={() => router.push(`/(tabs)/write?boardId=${networkBoard.id}` as never)}>
             <View style={[styles.quickPillIcon, { backgroundColor: Brand.primaryMuted }]}>
-              <Ionicons name="create-outline" size={16} color={Brand.primary} />
+              <Ionicons name="create-outline" size={18} color={Brand.primary} />
             </View>
             <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>글쓰기</ThemedText>
           </Pressable>
@@ -141,7 +147,7 @@ export default function HomeScreen() {
           ]}
           onPress={() => router.push('./school')}>
           <View style={[styles.quickPillIcon, { backgroundColor: '#F59E0B1A' }]}>
-            <Ionicons name="school-outline" size={16} color="#F59E0B" />
+            <Ionicons name="school-outline" size={18} color="#F59E0B" />
           </View>
           <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>학교</ThemedText>
         </Pressable>
@@ -156,7 +162,7 @@ export default function HomeScreen() {
           ]}
           onPress={() => router.push('./recruit')}>
           <View style={[styles.quickPillIcon, { backgroundColor: '#3B82F61A' }]}>
-            <Ionicons name="people-outline" size={16} color="#3B82F6" />
+            <Ionicons name="people-outline" size={18} color="#3B82F6" />
           </View>
           <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>모집</ThemedText>
         </Pressable>
@@ -212,9 +218,14 @@ export default function HomeScreen() {
                 onPress={() => router.push(`/(tabs)/boards/${board.id}` as never)}>
                 <View style={[styles.boardAccentBar, { backgroundColor: mg?.accentColor ?? Brand.primary }]} />
                 <View style={styles.boardCardBody}>
-                  <ThemedText type="defaultSemiBold" style={{ fontSize: 14 }}>
-                    {mg?.label ?? board.title}
-                  </ThemedText>
+                  <View style={styles.boardCardHeader}>
+                    <View style={[styles.boardIconCircle, { backgroundColor: (mg?.accentColor ?? Brand.primary) + '1A' }]}>
+                      <Ionicons name="book-outline" size={14} color={mg?.accentColor ?? Brand.primary} />
+                    </View>
+                    <ThemedText type="defaultSemiBold" style={{ fontSize: 14, flex: 1 }} numberOfLines={1}>
+                      {mg?.label ?? board.title}
+                    </ThemedText>
+                  </View>
                   <ThemedText type="caption" style={{ color: colors.textTertiary }} numberOfLines={1}>
                     {board.description}
                   </ThemedText>
@@ -369,11 +380,17 @@ function FilterChip({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: {
-    padding: Spacing.xl,
+    padding: Spacing.lg,
     paddingBottom: Spacing.xxxl,
-    gap: Spacing.lg,
+    gap: Spacing.md,
   },
   welcomeSection: { gap: Spacing.xs },
+  welcomeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
   statusBadge: {
     alignSelf: 'flex-start',
     paddingVertical: Spacing.xs,
@@ -384,22 +401,24 @@ const styles = StyleSheet.create({
   },
   quickActionRow: { flexDirection: 'row', gap: Spacing.sm },
   quickPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.md,
     borderWidth: 1,
   },
   quickPillIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filterScroll: { marginHorizontal: -Spacing.xl, paddingHorizontal: Spacing.xl },
+  filterScroll: { marginHorizontal: -Spacing.lg, paddingHorizontal: Spacing.lg },
   filterRow: { gap: Spacing.sm },
   filterChip: {
     flexDirection: 'row',
@@ -435,19 +454,30 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   boardAccentBar: {
-    height: 3,
+    height: 4,
   },
   boardCardBody: {
     padding: Spacing.md,
     gap: Spacing.xs,
   },
+  boardCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  boardIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   feedCard: {
-    gap: Spacing.md,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderLeftWidth: 3,
-    marginBottom: Spacing.sm,
   },
   feedMeta: {
     flexDirection: 'row',
