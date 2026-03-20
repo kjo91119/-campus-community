@@ -20,7 +20,7 @@
 1. `lib/validation.ts` 파일이 존재하는지 확인
 2. `COMMUNITY_VALIDATION` 상수를 `constants/community.ts`에서 import하는지 확인
 3. `SUPPORTED_UNIVERSITIES`를 `lib/community/metadata`에서 import하는지 확인
-4. 각 함수가 `{ ok: boolean; message?: string }` 형태를 반환하는지 확인
+4. 단일 validator(`validateEmail`, `validatePassword` 등)는 `{ ok: boolean; message?: string }` 반환, 복합 validator(`validatePostInput`, `validateRecruitmentInput`)는 `{ ok: boolean; errors: Record<string, string> }` 반환인지 확인
 5. `validateHeadcount`가 `recruitmentHeadcountMin`(2)과 `recruitmentHeadcountMax`(20) 범위를 체크하는지 확인
 
 ---
@@ -59,7 +59,7 @@
 5. 각 화면에서 `useToast()`를 호출하고 `showToast`를 사용하는지 확인:
    - `app/(tabs)/write.tsx` — 성공/실패/네트워크 에러 토스트
    - `app/(tabs)/recruit-write.tsx` — 동일 패턴
-   - `app/(auth)/email.tsx` — 로그인/에러 토스트
+   - `app/(auth)/email.tsx` — 검증 경고 토스트 + 로그인 성공 토스트 + 네트워크 에러 토스트 (auth 실패는 기존 `setFeedback`으로 인라인 표시)
    - `app/(tabs)/posts/[postId].tsx` — 댓글 성공/실패 토스트
    - `app/(tabs)/recruitments/[recruitmentId].tsx` — 동일 패턴
 
@@ -122,7 +122,8 @@
 - 실시간 인라인 검증 에러 표시 (제목/본문 아래 빨간색 텍스트)
 - `canSubmit` 플래그: 검증 통과 + 미제출 중일 때만 제출 가능
 - try-catch로 비동기 에러 핸들링
-- 성공/실패/네트워크 에러 시 토스트 표시
+- write.tsx / recruit-write.tsx: 성공/실패/네트워크 에러 시 토스트 표시
+- email.tsx: 검증 경고 + 로그인 성공 + 네트워크 에러 시 토스트 표시 (auth 실패 메시지는 기존 `setFeedback` 인라인 유지)
 
 **검증 방법:**
 1. `app/(tabs)/write.tsx`:
@@ -139,6 +140,7 @@
    - `validateEmail` + `validatePassword` import가 있는지 확인
    - 인라인 에러가 이메일/비밀번호 아래에 표시되는지 확인
    - `canSubmit`이 두 검증 모두 통과해야 true인지 확인
+   - auth 실패 시 `setFeedback(result.message)`로 인라인 피드백이 유지되는지 확인 (토스트가 아님)
 
 ---
 
