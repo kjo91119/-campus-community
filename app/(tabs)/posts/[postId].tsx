@@ -19,6 +19,8 @@ import {
   REPORT_REASON_OPTIONS,
 } from '@/constants/community';
 import { Brand, Radius, Spacing } from '@/constants/theme';
+import { useToast } from '@/components/toast';
+import { validateComment } from '@/lib/validation';
 import { EmptyState } from '@/components/empty-state';
 import { SkeletonDetail } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
@@ -59,6 +61,7 @@ export default function PostDetailScreen() {
   const [selectedReason, setSelectedReason] = useState<ReportReason>(REPORT_REASON_OPTIONS[0]!.value);
   const [feedback, setFeedback] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useToast();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const readAccess = getReadAccessForPost(postId);
@@ -134,19 +137,35 @@ export default function PostDetailScreen() {
     );
   }
 
+  const commentValidation = validateComment(commentBody);
+  const canSubmitComment = commentAccess.ok && !isSubmitting && commentValidation.ok;
+
   const handleSubmit = async () => {
+    if (!commentValidation.ok) {
+      showToast(commentValidation.message ?? '댓글을 확인해 주세요.', 'warning');
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const result = await createComment({
-      postId: post.id,
-      body: commentBody,
-    });
+    try {
+      const result = await createComment({
+        postId: post.id,
+        body: commentBody,
+      });
 
-    setIsSubmitting(false);
-    setFeedback(result.message);
+      setFeedback(result.message);
 
-    if (result.ok) {
-      setCommentBody('');
+      if (result.ok) {
+        setCommentBody('');
+        showToast('댓글이 등록되었습니다.', 'success');
+      } else {
+        showToast(result.message ?? '댓글 등록에 실패했습니다.', 'error');
+      }
+    } catch {
+      showToast('네트워크 오류가 발생했습니다. 다시 시도해 주세요.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -412,6 +431,7 @@ export default function PostDetailScreen() {
           <ThemedText type="caption" style={{ color: colors.textSecondary }}>{commentAccess.message}</ThemedText>
         ) : null}
         <TextInput
+          accessibilityLabel="댓글 입력"
           editable={commentAccess.ok && !isSubmitting}
           multiline
           onChangeText={setCommentBody}
@@ -434,10 +454,10 @@ export default function PostDetailScreen() {
           <ThemedText type="caption" style={{ color: colors.textSecondary }}>{feedback}</ThemedText>
         ) : null}
         <Pressable
-          disabled={!commentAccess.ok || isSubmitting}
+          disabled={!canSubmitComment}
           style={({ pressed }) => [
             styles.primaryButton,
-            (!commentAccess.ok || isSubmitting) && styles.disabledButton,
+            !canSubmitComment && styles.disabledButton,
             pressed && { opacity: 0.85 },
           ]}
           onPress={() => void handleSubmit()}>

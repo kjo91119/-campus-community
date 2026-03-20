@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   Pressable,
@@ -15,10 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Brand, Radius, Shadow, Spacing } from '@/constants/theme';
 import { EmptyState } from '@/components/empty-state';
 import { FadeInView } from '@/components/fade-in-view';
+import { SearchBar } from '@/components/search-bar';
 import { SkeletonFeed } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 
 import { useAnalytics } from '@/hooks/use-analytics';
+import { usePaginatedList } from '@/hooks/use-paginated-list';
 import { useCommunityData } from '@/hooks/use-community-data';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useThemeColors } from '@/hooks/use-theme-color';
@@ -37,6 +40,7 @@ export default function HomeScreen() {
   const { profile, isReadOnly } = useAppSession();
   const { getMajorBoards, getNetworkBoard, getPostsByBoardId, isHydrating, isRefreshing, refresh } = useCommunityData();
   const [selectedMajorId, setSelectedMajorId] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const currentUniversity = getUniversityById(profile.primaryUniversityId);
   const currentMajorGroup = getMajorGroupById(profile.primaryMajorGroupId);
   const majorBoards = getMajorBoards();
@@ -44,10 +48,15 @@ export default function HomeScreen() {
   const networkPosts = getPostsByBoardId(networkBoard?.id).filter(
     (post) => post.postType !== 'recruitment'
   );
-  const filteredPosts =
-    selectedMajorId === 'all'
-      ? networkPosts
-      : networkPosts.filter((post) => post.majorGroupId === selectedMajorId);
+  const filteredPosts = networkPosts.filter((post) => {
+    if (selectedMajorId !== 'all' && post.majorGroupId !== selectedMajorId) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return post.title.toLowerCase().includes(q) || post.summary?.toLowerCase().includes(q);
+    }
+    return true;
+  });
+  const { visibleData: paginatedPosts, hasMore, loadMore } = usePaginatedList(filteredPosts);
   const hasTrackedHomeViewRef = useRef(false);
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -71,6 +80,10 @@ export default function HomeScreen() {
     });
     hasTrackedHomeViewRef.current = true;
   }, [profile.primaryMajorGroupId, profile.primaryUniversityId, track]);
+
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
 
   const handleSelectMajorFilter = useCallback((nextMajorId: string) => {
     setSelectedMajorId((prev) => {
@@ -149,6 +162,9 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
+      {/* Search */}
+      <SearchBar placeholder="게시글 검색" onSearch={handleSearch} />
+
       {/* Major filter */}
       <FlatList
         horizontal
@@ -215,7 +231,7 @@ export default function HomeScreen() {
         colors={colors}
       />
     </>
-  ), [colors, currentMajorGroup, currentUniversity, handleSelectMajorFilter, headerOpacity, headerTranslateY, isReadOnly, majorBoards, networkBoard, profile.nickname, router, selectedMajorId]);
+  ), [colors, currentMajorGroup, currentUniversity, handleSearch, handleSelectMajorFilter, headerOpacity, headerTranslateY, isReadOnly, majorBoards, networkBoard, profile.nickname, router, selectedMajorId]);
 
   const renderItem = useCallback(({ item: post, index }: { item: CommunityPost; index: number }) => {
     const mg = getMajorGroupById(post.majorGroupId);
@@ -223,6 +239,8 @@ export default function HomeScreen() {
     return (
       <FadeInView delay={index * 50}>
         <Pressable
+          accessibilityLabel={`${post.title}, 댓글 ${post.commentCount}개`}
+          accessibilityRole="button"
           style={({ pressed }) => [
             styles.feedCard,
             {
@@ -279,12 +297,15 @@ export default function HomeScreen() {
     <Animated.FlatList
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}
-      data={filteredPosts}
+      data={paginatedPosts}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       ListHeaderComponent={renderHeader}
       ListEmptyComponent={renderEmpty}
+      ListFooterComponent={hasMore ? <ActivityIndicator style={{ paddingVertical: Spacing.lg }} color={colors.textTertiary} /> : null}
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.textTertiary} />}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
       onScroll={Animated.event(
         [{ nativeEvent: { contentOffset: { y: scrollY } } }],
         { useNativeDriver: true }
@@ -317,6 +338,9 @@ function FilterChip({
   const activeColor = accentColor ?? colors.chipSelectedText;
   return (
     <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.filterChip,

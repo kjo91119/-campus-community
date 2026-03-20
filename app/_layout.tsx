@@ -11,6 +11,9 @@ import { CommunityProvider } from '@/hooks/use-community-data';
 import { SupabaseAuthProvider } from '@/hooks/use-supabase-auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { OfflineBanner } from '@/components/offline-banner';
+import { ToastProvider } from '@/components/toast';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -51,13 +54,18 @@ export default function RootLayout() {
         <SupabaseAuthProvider>
           <AppSessionProvider>
             <CommunityProvider>
-              <Animated.View style={[layoutStyles.root, { opacity: fadeAnim }]}>
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="(auth)" />
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="modal" options={{ presentation: 'modal', title: '안내' }} />
-                </Stack>
-              </Animated.View>
+              <ToastProvider>
+                <ErrorBoundary>
+                  <OfflineBanner />
+                  <Animated.View style={[layoutStyles.root, { opacity: fadeAnim }]}>
+                    <Stack screenOptions={{ headerShown: false }}>
+                      <Stack.Screen name="(auth)" />
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="modal" options={{ presentation: 'modal', title: '안내' }} />
+                    </Stack>
+                  </Animated.View>
+                </ErrorBoundary>
+              </ToastProvider>
             </CommunityProvider>
           </AppSessionProvider>
         </SupabaseAuthProvider>

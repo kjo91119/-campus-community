@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Pressable,
   RefreshControl,
@@ -21,10 +22,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Brand, Radius, Shadow, Spacing } from '@/constants/theme';
 import { EmptyState } from '@/components/empty-state';
 import { FadeInView } from '@/components/fade-in-view';
+import { SearchBar } from '@/components/search-bar';
 import { SkeletonFeed } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAnalytics } from '@/hooks/use-analytics';
+import { usePaginatedList } from '@/hooks/use-paginated-list';
 import { useCommunityData } from '@/hooks/use-community-data';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useThemeColors } from '@/hooks/use-theme-color';
@@ -41,11 +44,17 @@ export default function RecruitScreen() {
   const [selectedMajorId, setSelectedMajorId] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [includeClosed, setIncludeClosed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const recruitments = getRecruitments(selectedMajorId).filter((recruitment) => {
     if (selectedType !== 'all' && recruitment.recruitmentType !== selectedType) return false;
     if (!includeClosed && recruitment.status !== 'open') return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return recruitment.title.toLowerCase().includes(q) || recruitment.summary?.toLowerCase().includes(q);
+    }
     return true;
   });
+  const { visibleData: paginatedRecruitments, hasMore, loadMore } = usePaginatedList(recruitments);
 
   const hasTrackedRecruitmentListRef = useRef(false);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -67,6 +76,10 @@ export default function RecruitScreen() {
     track('recruitment_list_viewed', { major_group: profile.primaryMajorGroupId ?? null });
     hasTrackedRecruitmentListRef.current = true;
   }, [profile.primaryMajorGroupId, track]);
+
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
 
   const renderHeader = useCallback(() => (
     <>
@@ -116,6 +129,9 @@ export default function RecruitScreen() {
           <ThemedText type="defaultSemiBold" style={{ fontSize: 13 }}>내 전공</ThemedText>
         </Pressable>
       </View>
+
+      {/* Search */}
+      <SearchBar placeholder="모집글 검색" onSearch={handleSearch} />
 
       {/* Filters */}
       <ThemedView variant="surface" style={styles.card}>
@@ -190,7 +206,7 @@ export default function RecruitScreen() {
         <ThemedText type="subtitle" style={{ fontSize: 16 }}>모집 목록</ThemedText>
       </View>
     </>
-  ), [colors, headerOpacity, headerTranslateY, includeClosed, isReadOnly, profile.primaryMajorGroupId, router, selectedMajorId, selectedType]);
+  ), [colors, handleSearch, headerOpacity, headerTranslateY, includeClosed, isReadOnly, profile.primaryMajorGroupId, router, selectedMajorId, selectedType]);
 
   const renderItem = useCallback(({ item: recruitment, index }: { item: RecruitmentCard; index: number }) => {
     const mg = getMajorGroupById(recruitment.preferredMajorGroupId);
@@ -198,6 +214,8 @@ export default function RecruitScreen() {
     return (
       <FadeInView delay={index * 50}>
         <Pressable
+          accessibilityLabel={`${recruitment.title}, ${RECRUITMENT_STATUS_LABELS[recruitment.status]}`}
+          accessibilityRole="button"
           style={({ pressed }) => [
             styles.recruitCard,
             {
@@ -268,12 +286,15 @@ export default function RecruitScreen() {
     <Animated.FlatList
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.lg }]}
-      data={recruitments}
+      data={paginatedRecruitments}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       ListHeaderComponent={renderHeader}
       ListEmptyComponent={renderEmpty}
+      ListFooterComponent={hasMore ? <ActivityIndicator style={{ paddingVertical: Spacing.lg }} color={colors.textTertiary} /> : null}
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={colors.textTertiary} />}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
       onScroll={Animated.event(
         [{ nativeEvent: { contentOffset: { y: scrollY } } }],
         { useNativeDriver: true }
@@ -295,6 +316,9 @@ function FilterChip({
   const activeColor = accentColor ?? colors.chipSelectedText;
   return (
     <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.filterChip,

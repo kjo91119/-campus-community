@@ -18,6 +18,8 @@ import {
   RECRUITMENT_TYPE_OPTIONS,
 } from '@/constants/community';
 import { Brand, Radius, Spacing } from '@/constants/theme';
+import { useToast } from '@/components/toast';
+import { validateRecruitmentInput } from '@/lib/validation';
 import { SkeletonDetail } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -103,9 +105,16 @@ export default function RecruitWriteScreen() {
   const lockedMajorGroupId =
     selectedBoard?.scopeType === 'major_group' ? selectedBoard.majorGroupId : undefined;
   const effectiveMajorGroupId = lockedMajorGroupId ?? preferredMajorGroupId;
+  const { showToast } = useToast();
   const titleRef = useRef<TextInputType>(null);
   const bodyRef = useRef<TextInputType>(null);
   const hasTrackedCreateStartRef = useRef(false);
+
+  const validation = useMemo(
+    () => validateRecruitmentInput(title, body, headcount),
+    [title, body, headcount],
+  );
+  const canSubmit = writeAccess.ok && !isSubmitting && validation.ok;
 
   useEffect(() => {
     if (boardChoices.some((choice) => choice.id === boardId)) {
@@ -160,24 +169,38 @@ export default function RecruitWriteScreen() {
   }
 
   const handleSubmit = async () => {
+    if (!validation.ok) {
+      const firstError = Object.values(validation.errors)[0];
+      if (firstError) showToast(firstError, 'warning');
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const result = await createRecruitment({
-      boardId,
-      title,
-      body,
-      recruitmentType,
-      mode,
-      headcount,
-      deadlineDays,
-      preferredMajorGroupId: effectiveMajorGroupId,
-    });
+    try {
+      const result = await createRecruitment({
+        boardId,
+        title,
+        body,
+        recruitmentType,
+        mode,
+        headcount,
+        deadlineDays,
+        preferredMajorGroupId: effectiveMajorGroupId,
+      });
 
-    setIsSubmitting(false);
-    setFeedback(result.message);
+      setFeedback(result.message);
 
-    if (result.ok && result.recruitmentId) {
-      router.replace(`/(tabs)/recruitments/${result.recruitmentId}` as never);
+      if (result.ok && result.recruitmentId) {
+        showToast('모집글이 등록되었습니다.', 'success');
+        router.replace(`/(tabs)/recruitments/${result.recruitmentId}` as never);
+      } else {
+        showToast(result.message ?? '등록에 실패했습니다.', 'error');
+      }
+    } catch {
+      showToast('네트워크 오류가 발생했습니다. 다시 시도해 주세요.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -277,6 +300,7 @@ export default function RecruitWriteScreen() {
       <ThemedView variant="surface" style={styles.card}>
         <ThemedText type="sectionHeader">모집 설정</ThemedText>
         <TextInput
+          accessibilityLabel="모집 인원"
           editable={writeAccess.ok && !isSubmitting}
           keyboardType="number-pad"
           onChangeText={setHeadcount}
@@ -292,6 +316,9 @@ export default function RecruitWriteScreen() {
           ]}
           value={headcount}
         />
+        {validation.errors.headcount ? (
+          <ThemedText type="caption" style={{ color: Brand.error }}>{validation.errors.headcount}</ThemedText>
+        ) : null}
         <View style={styles.optionRow}>
           {RECRUITMENT_MODE_OPTIONS.map((option) => {
             const selected = option.value === mode;
@@ -446,6 +473,7 @@ export default function RecruitWriteScreen() {
         <ThemedText type="sectionHeader">모집 본문</ThemedText>
         <TextInput
           ref={titleRef}
+          accessibilityLabel="모집글 제목"
           editable={writeAccess.ok && !isSubmitting}
           maxLength={80}
           onChangeText={setTitle}
@@ -463,11 +491,17 @@ export default function RecruitWriteScreen() {
           ]}
           value={title}
         />
-        <ThemedText type="caption" style={{ color: title.length >= 70 ? Brand.primary : colors.textTertiary, alignSelf: 'flex-end' }}>
-          {title.length}/80
-        </ThemedText>
+        <View style={styles.counterRow}>
+          {validation.errors.title ? (
+            <ThemedText type="caption" style={{ color: Brand.error }}>{validation.errors.title}</ThemedText>
+          ) : <View />}
+          <ThemedText type="caption" style={{ color: title.length >= 70 ? Brand.primary : colors.textTertiary }}>
+            {title.length}/80
+          </ThemedText>
+        </View>
         <TextInput
           ref={bodyRef}
+          accessibilityLabel="모집글 본문"
           editable={writeAccess.ok && !isSubmitting}
           multiline
           onChangeText={setBody}
@@ -483,9 +517,14 @@ export default function RecruitWriteScreen() {
           ]}
           value={body}
         />
-        <ThemedText type="caption" style={{ color: colors.textTertiary, alignSelf: 'flex-end' }}>
-          {body.length}자
-        </ThemedText>
+        <View style={styles.counterRow}>
+          {validation.errors.body ? (
+            <ThemedText type="caption" style={{ color: Brand.error }}>{validation.errors.body}</ThemedText>
+          ) : <View />}
+          <ThemedText type="caption" style={{ color: colors.textTertiary }}>
+            {body.length}자
+          </ThemedText>
+        </View>
         <ThemedText type="caption" style={{ color: colors.textTertiary }}>
           현재 설정: {selectedBoard?.title ?? '미선택'} ·{' '}
           {getMajorGroupById(effectiveMajorGroupId)?.label ?? '전공군 전체'}
@@ -496,10 +535,10 @@ export default function RecruitWriteScreen() {
         <Pressable
           accessibilityLabel="모집글 등록"
           accessibilityRole="button"
-          disabled={!writeAccess.ok || isSubmitting}
+          disabled={!canSubmit}
           style={({ pressed }) => [
             styles.primaryButton,
-            (!writeAccess.ok || isSubmitting) && styles.disabledButton,
+            !canSubmit && styles.disabledButton,
             pressed && { opacity: 0.85 },
           ]}
           onPress={() => void handleSubmit()}>
@@ -569,6 +608,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  counterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   disabledButton: {
     opacity: 0.5,

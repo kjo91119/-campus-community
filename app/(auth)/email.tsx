@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,6 +12,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Brand, Radius, Spacing } from '@/constants/theme';
+import { useToast } from '@/components/toast';
+import { validateEmail, validatePassword } from '@/lib/validation';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAnalytics } from '@/hooks/use-analytics';
@@ -42,18 +44,41 @@ export default function EmailAuthScreen() {
   const [email, setEmail] = useState(lastSubmittedEmail ?? '');
   const [password, setPassword] = useState('');
   const [feedback, setFeedback] = useState<string | undefined>();
+  const { showToast } = useToast();
+
+  const emailValidation = useMemo(
+    () => validateEmail(email, verificationPath === 'school_email'),
+    [email, verificationPath],
+  );
+  const passwordValidation = useMemo(() => validatePassword(password), [password]);
+  const canSubmit = !isLoading && emailValidation.ok && passwordValidation.ok;
 
   const handleSubmit = async () => {
+    if (!emailValidation.ok) {
+      showToast(emailValidation.message ?? '이메일을 확인해 주세요.', 'warning');
+      return;
+    }
+
+    if (!passwordValidation.ok) {
+      showToast(passwordValidation.message ?? '비밀번호를 확인해 주세요.', 'warning');
+      return;
+    }
+
     if (mode === 'sign_up' && verificationPath === 'school_email') {
       track('school_email_submitted', { entry: 'email_auth' });
     }
 
-    const action = mode === 'sign_up' ? signUpWithEmail : signInWithEmail;
-    const result = await action({ email, password, verificationPath });
-    setFeedback(result.message);
+    try {
+      const action = mode === 'sign_up' ? signUpWithEmail : signInWithEmail;
+      const result = await action({ email, password, verificationPath });
+      setFeedback(result.message);
 
-    if (result.nextStep === 'signed_in') {
-      router.replace('/');
+      if (result.nextStep === 'signed_in') {
+        showToast('로그인되었습니다.', 'success');
+        router.replace('/');
+      }
+    } catch {
+      showToast('네트워크 오류가 발생했습니다. 다시 시도해 주세요.', 'error');
     }
   };
 
@@ -165,6 +190,7 @@ export default function EmailAuthScreen() {
           {verificationPath === 'school_email' ? '학교 이메일 / 비밀번호' : '이메일 / 비밀번호'}
         </ThemedText>
         <TextInput
+          accessibilityLabel="이메일 주소"
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
@@ -176,8 +202,12 @@ export default function EmailAuthScreen() {
           style={[styles.input, { borderColor: colors.inputBorder, color: colors.text, backgroundColor: colors.inputBackground }]}
           value={email}
         />
+        {email.length > 0 && !emailValidation.ok ? (
+          <ThemedText type="caption" style={{ color: Brand.error }}>{emailValidation.message}</ThemedText>
+        ) : null}
         <TextInput
           ref={passwordRef}
+          accessibilityLabel="비밀번호"
           autoCapitalize="none"
           autoComplete="password"
           onChangeText={setPassword}
@@ -189,6 +219,9 @@ export default function EmailAuthScreen() {
           style={[styles.input, { borderColor: colors.inputBorder, color: colors.text, backgroundColor: colors.inputBackground }]}
           value={password}
         />
+        {password.length > 0 && !passwordValidation.ok ? (
+          <ThemedText type="caption" style={{ color: Brand.error }}>{passwordValidation.message}</ThemedText>
+        ) : null}
         {feedback ? (
           <ThemedText type="caption" style={{ color: Brand.primary }}>{feedback}</ThemedText>
         ) : null}
@@ -214,12 +247,12 @@ export default function EmailAuthScreen() {
         <Pressable
           accessibilityLabel={mode === 'sign_in' ? '로그인' : '회원가입'}
           accessibilityRole="button"
-          disabled={isLoading}
+          disabled={!canSubmit}
           style={({ pressed }) => [
             styles.primaryButton,
             { backgroundColor: Brand.primary },
             pressed && { opacity: 0.85 },
-            isLoading && { opacity: 0.5 },
+            !canSubmit && { opacity: 0.5 },
           ]}
           onPress={() => void handleSubmit()}>
           {isLoading ? (

@@ -24,8 +24,11 @@ export function ThemedText({
         ? colors.textSecondary
         : colors.text;
 
+  const isHeading = type === 'title' || type === 'subtitle' || type === 'sectionHeader';
+
   return (
     <Text
+      accessibilityRole={isHeading ? 'header' : rest.accessibilityRole}
       style={[
         { color },
         styles[type] ?? styles.default,

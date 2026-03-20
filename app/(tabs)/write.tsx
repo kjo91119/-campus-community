@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -17,6 +17,8 @@ import {
   POST_TYPE_OPTIONS,
 } from '@/constants/community';
 import { Brand, Radius, Spacing } from '@/constants/theme';
+import { useToast } from '@/components/toast';
+import { validatePostInput } from '@/lib/validation';
 import { SkeletonDetail } from '@/components/skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -51,9 +53,13 @@ export default function WriteScreen() {
   const writeAccess = getWriteAccessForBoard(boardId);
   const university = getUniversityById(board?.universityId);
   const majorGroup = getMajorGroupById(board?.majorGroupId);
+  const { showToast } = useToast();
   const titleRef = useRef<TextInputType>(null);
   const bodyRef = useRef<TextInputType>(null);
   const hasTrackedCreateStartRef = useRef(false);
+
+  const validation = useMemo(() => validatePostInput(title, body), [title, body]);
+  const canSubmit = writeAccess.ok && !isSubmitting && validation.ok;
 
   useEffect(() => {
     if (!board || hasTrackedCreateStartRef.current) {
@@ -96,21 +102,35 @@ export default function WriteScreen() {
   }
 
   const handleSubmit = async () => {
+    if (!validation.ok) {
+      const firstError = Object.values(validation.errors)[0];
+      if (firstError) showToast(firstError, 'warning');
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const result = await createPost({
-      boardId: board.id,
-      title,
-      body,
-      category,
-      postType,
-    });
+    try {
+      const result = await createPost({
+        boardId: board.id,
+        title,
+        body,
+        category,
+        postType,
+      });
 
-    setIsSubmitting(false);
-    setFeedback(result.message);
+      setFeedback(result.message);
 
-    if (result.ok && result.postId) {
-      router.replace(`/(tabs)/posts/${result.postId}` as never);
+      if (result.ok && result.postId) {
+        showToast('게시글이 등록되었습니다.', 'success');
+        router.replace(`/(tabs)/posts/${result.postId}` as never);
+      } else {
+        showToast(result.message ?? '등록에 실패했습니다.', 'error');
+      }
+    } catch {
+      showToast('네트워크 오류가 발생했습니다. 다시 시도해 주세요.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -220,6 +240,7 @@ export default function WriteScreen() {
         <ThemedText type="sectionHeader">본문 입력</ThemedText>
         <TextInput
           ref={titleRef}
+          accessibilityLabel="게시글 제목"
           autoFocus
           editable={writeAccess.ok && !isSubmitting}
           maxLength={80}
@@ -238,11 +259,17 @@ export default function WriteScreen() {
           ]}
           value={title}
         />
-        <ThemedText type="caption" style={{ color: title.length >= 70 ? Brand.primary : colors.textTertiary, alignSelf: 'flex-end' }}>
-          {title.length}/80
-        </ThemedText>
+        <View style={styles.counterRow}>
+          {validation.errors.title ? (
+            <ThemedText type="caption" style={{ color: Brand.error }}>{validation.errors.title}</ThemedText>
+          ) : <View />}
+          <ThemedText type="caption" style={{ color: title.length >= 70 ? Brand.primary : colors.textTertiary }}>
+            {title.length}/80
+          </ThemedText>
+        </View>
         <TextInput
           ref={bodyRef}
+          accessibilityLabel="게시글 본문"
           editable={writeAccess.ok && !isSubmitting}
           multiline
           onChangeText={setBody}
@@ -258,19 +285,24 @@ export default function WriteScreen() {
           ]}
           value={body}
         />
-        <ThemedText type="caption" style={{ color: colors.textTertiary, alignSelf: 'flex-end' }}>
-          {body.length}자
-        </ThemedText>
+        <View style={styles.counterRow}>
+          {validation.errors.body ? (
+            <ThemedText type="caption" style={{ color: Brand.error }}>{validation.errors.body}</ThemedText>
+          ) : <View />}
+          <ThemedText type="caption" style={{ color: colors.textTertiary }}>
+            {body.length}자
+          </ThemedText>
+        </View>
         {feedback ? (
           <ThemedText type="caption" style={{ color: colors.textSecondary }}>{feedback}</ThemedText>
         ) : null}
         <Pressable
           accessibilityLabel="게시글 등록"
           accessibilityRole="button"
-          disabled={!writeAccess.ok || isSubmitting}
+          disabled={!canSubmit}
           style={({ pressed }) => [
             styles.primaryButton,
-            (!writeAccess.ok || isSubmitting) && styles.disabledButton,
+            !canSubmit && styles.disabledButton,
             pressed && { opacity: 0.85 },
           ]}
           onPress={() => void handleSubmit()}>
@@ -341,6 +373,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  counterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   disabledButton: {
     opacity: 0.5,
